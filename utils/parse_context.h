@@ -485,7 +485,10 @@ struct Parse_Context {
         if (*cur_ != '\r') return false;
 
         // deal with DOS line endings
-        return match_literal("\r\n");
+        if(match_literal("\r\n") || *cur_ == '\r')
+            return true;
+
+        return false;
     }
 
     void expect_eol(const char * error = "expected eol")

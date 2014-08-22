@@ -41,4 +41,9 @@ BOOST_AUTO_TEST_CASE (test1)
     testCsvLine("\"\"", {""});
     testCsvLine("\"\",", {"",""});
     testCsvLine("\"\",\"\"", {"",""});
+
+    // check that we handle all line endings correctly
+    testCsvLine("\n", {});
+    testCsvLine("\r\n", {});
+    testCsvLine("\r", {});
 }
