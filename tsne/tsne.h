@@ -78,6 +78,22 @@ vectors_to_distances(boost::multi_array<double, 2> & X,
     return result;
 }
 
+/** Calculate the beta for a single point.
+    
+    \param Di     The i-th row of the D matrix, for which we want to calculate
+                  the probabilities.
+    \param i      Which row number it is' -1 means none
+
+    \returns      The i-th row of the P matrix, which has the distances in D
+                  converted to probabilities with the given perplexity, as well
+                  as the calculated perplexity value.
+ */
+std::pair<distribution<float>, double>
+binary_search_perplexity(const distribution<float> & Di,
+                         double required_perplexity,
+                         int i = -1,
+                         double tolerance = 1e-5);
+
 boost::multi_array<float, 2>
 distances_to_probabilities(boost::multi_array<float, 2> & D,
                            double tolerance = 1e-5,
@@ -128,6 +144,27 @@ tsne(const boost::multi_array<float, 2> & probs,
      int num_dims = 2,
      const TSNE_Params & params = TSNE_Params(),
      const TSNE_Callback & callback = TSNE_Callback());
+
+/** Re-run t-SNE over the given high dimensional probability vector for a
+    single example, figuring out where that example should be embedded in
+    a fixed containing space from the main tsne computation.
+
+    The calculation is much simpler since we only have one point that can
+    move at a time, rather than the whole lot of them.
+*/
+ML::distribution<float>
+retsne(const ML::distribution<float> & probs,
+       const boost::multi_array<float, 2> & prevOutput,
+       const TSNE_Params & params = TSNE_Params());
+
+/** Re-tsne multiple vectors in parallel.  This is equivalent to calling
+    retsne on each of the inputs one at a time and accumulating the
+    results.
+*/
+std::vector<ML::distribution<float> >
+retsne(const std::vector<ML::distribution<float> > & probs,
+       const boost::multi_array<float, 2> & prevOutput,
+       const TSNE_Params & params = TSNE_Params());
 
 
 } // namespace ML

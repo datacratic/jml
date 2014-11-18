@@ -9,6 +9,8 @@
 #include "jml/stats/distribution.h"
 #include "jml/stats/distribution_ops.h"
 #include "jml/stats/distribution_simd.h"
+#include "jml/utils/vector_utils.h"
+#include "jml/utils/pair_utils.h"
 #include "jml/algebra/matrix_ops.h"
 #include "jml/arch/simd_vector.h"
 #include <boost/tuple/tuple.hpp>
@@ -26,6 +28,7 @@
 #include "jml/utils/guard.h"
 #include <boost/bind.hpp>
 #include "jml/utils/environment.h"
+#include "quadtree.h"
 
 using namespace std;
 
@@ -160,7 +163,7 @@ vectors_to_distances(const boost::multi_array<Float, 2> & X,
                                      boost::ref(worker),
                                      group));
         
-        int chunk_size = 64;
+        int chunk_size = 256;
         
         for (int i = n;  i > 0;  i -= chunk_size) {
             int i0 = max(0, i - chunk_size);
@@ -270,7 +273,7 @@ std::pair<distribution<float>, double>
 binary_search_perplexity(const distribution<float> & Di,
                          double required_perplexity,
                          int i,
-                         double tolerance = 1e-5)
+                         double tolerance)
 {
     double betamin = -INFINITY, betamax = INFINITY;
     double beta = 1.0;
@@ -403,7 +406,7 @@ distances_to_probabilities(boost::multi_array<float, 2> & D,
                                      boost::ref(worker),
                                      group));
         
-        int chunk_size = 64;
+        int chunk_size = 256;
         
         for (int i = 0;  i < n;  i += chunk_size) {
             int i0 = i;
@@ -702,7 +705,7 @@ double tsne_calc_stiffness(boost::multi_array<float, 2> & D,
                                      boost::ref(worker),
                                      group));
         
-        int chunk_size = 64;
+        int chunk_size = 256;
         
         for (int i = n;  i > 0;  i -= chunk_size) {
             int i0 = max(0, i - chunk_size);
@@ -1009,6 +1012,7 @@ tsne(const boost::multi_array<float, 2> & probs,
                              boost::normal_distribution<float> >
         randn(rng, norm);
 
+#if 0
     double min_perp = INFINITY;
     double max_perp = 0.0;
     double total_perp = 0.0;
@@ -1027,12 +1031,13 @@ tsne(const boost::multi_array<float, 2> & probs,
          << " max: " << max_perp << " average: " << total_perp / n
          << " avg log: " << total_log_perp / n
          << " total log: " << total_log_perp << endl;
+#endif
         
 
     boost::multi_array<float, 2> Y(boost::extents[n][d]);
     for (unsigned i = 0;  i < n;  ++i)
         for (unsigned j = 0;  j < d;  ++j)
-            Y[i][j] = 0.01 * randn();
+            Y[i][j] = 0.0001 * randn();
 
     // Symmetrize and probabilize P
     boost::multi_array<float, 2> P = probs + transpose(probs);
@@ -1073,9 +1078,13 @@ tsne(const boost::multi_array<float, 2> & probs,
     boost::multi_array<float, 2> gains(boost::extents[n][d]);
     std::fill(gains.data(), gains.data() + gains.num_elements(), 1.0f);
 
-    if (callback
-        && !callback(-1, INFINITY, "init")) return Y;
+
+    double cost = INFINITY;
+    double last_cost = INFINITY;
     
+    if (callback
+        && !callback(-1, cost, "init")) return Y;
+
     for (int iter = 0;  iter < params.max_iter;  ++iter) {
 
         boost::timer t;
@@ -1094,15 +1103,25 @@ tsne(const boost::multi_array<float, 2> & probs,
         t_v2d += t.elapsed();  t.restart();
         
         if (callback
-            && !callback(iter, INFINITY, "v2d")) return Y;
+            && !callback(iter, cost, "v2d")) return Y;
 
         // Do we calculate the cost?
-        bool calc_cost = (iter + 1) % 100 == 0 || iter == params.max_iter - 1;
+        bool calc_cost = iter < 10 || (iter + 1) % 10 == 0 || iter == params.max_iter - 1;
+        
+        double cost2 = tsne_calc_stiffness(D, P, params.min_prob, calc_cost);
+        if (calc_cost) {
+            last_cost = cost;
+            cost = cost2;
 
-        double cost = tsne_calc_stiffness(D, P, params.min_prob, calc_cost);
+            if (isfinite(cost) && cost == last_cost) {
+                // converged
+                break;
+            }
+                
+        }
 
         if (callback
-            && !callback(iter, INFINITY, "stiffness")) return Y;
+            && !callback(iter, cost, "stiffness")) return Y;
 
         t_stiffness += t.elapsed();  t.restart();
 
@@ -1120,7 +1139,7 @@ tsne(const boost::multi_array<float, 2> & probs,
         t_dY += t.elapsed();  t.restart();
 
         if (callback
-            && !callback(iter, INFINITY, "gradient")) return Y;
+            && !callback(iter, cost, "gradient")) return Y;
 
 
         /*********************************************************************/
@@ -1134,7 +1153,7 @@ tsne(const boost::multi_array<float, 2> & probs,
                     params.min_gain);
 
         if (callback
-            && !callback(iter, INFINITY, "update")) return Y;
+            && !callback(iter, cost, "update")) return Y;
 
         t_update += t.elapsed();  t.restart();
 
@@ -1145,7 +1164,7 @@ tsne(const boost::multi_array<float, 2> & probs,
         recenter_about_origin(Y);
 
         if (callback
-            && !callback(iter, INFINITY, "recenter")) return Y;
+            && !callback(iter, cost, "recenter")) return Y;
 
         t_recenter += t.elapsed();  t.restart();
 
@@ -1172,5 +1191,880 @@ tsne(const boost::multi_array<float, 2> & probs,
 
     return Y;
 }
+
+double sqr(double d)
+{
+    return d * d;
+}
+
+#if 0
+boost::multi_array<float, 2>
+tsneApprox(const boost::multi_array<float, 2> & probs,
+           int num_dims,
+           const TSNE_Params & params,
+           const TSNE_Callback & callback)
+{
+    int nx = probs.shape()[0];
+    if (nx != probs.shape()[1])
+        throw Exception("probabilities were the wrong shape");
+
+    int nd = num_dims;
+
+    boost::mt19937 rng;
+    boost::normal_distribution<float> norm;
+
+    boost::variate_generator<boost::mt19937,
+                             boost::normal_distribution<float> >
+        randn(rng, norm);
+
+#if 0
+    double min_perp = INFINITY;
+    double max_perp = 0.0;
+    double total_perp = 0.0;
+    double total_log_perp = 0.0;
+
+    for (unsigned i = 0;  i < n;  ++i) {
+        distribution<float> P_row(&probs[i][0], &probs[i][0] + n);
+        double perp = perplexity(P_row);
+        min_perp = std::min(min_perp, perp);
+        max_perp = std::max(max_perp, perp);
+        total_perp += perp;
+        total_log_perp += log(perp);
+    }
+    
+    cerr << "input perplexity: min " << min_perp
+         << " max: " << max_perp << " average: " << total_perp / n
+         << " avg log: " << total_log_perp / n
+         << " total log: " << total_log_perp << endl;
+#endif
+        
+
+    boost::multi_array<float, 2> Y(boost::extents[nx][nd]);
+    for (unsigned i = 0;  i < nx;  ++i)
+        for (unsigned j = 0;  j < nd;  ++j)
+            Y[i][j] = 0.0001 * randn();
+
+    // Symmetrize and probabilize P
+    boost::multi_array<float, 2> P = probs + transpose(probs);
+
+    // TODO: symmetric so only need to total the upper diagonal
+    double sumP = 0.0;
+    for (unsigned i = 0;  i < nx;  ++i)
+        sumP += 2.0 * SIMD::vec_sum_dp(&P[i][0], i);
+    
+    // Factor that P should be multiplied by in all calculations
+    // We boost it by 4 in early iterations to force the clusters to be
+    // spread apart
+    float pfactor = 4.0 / sumP;
+
+    // TODO: do we need this?   P = Math.maximum(P, 1e-12);
+    for (unsigned i = 0;  i < nx;  ++i)
+        for (unsigned j = 0;  j < nx;  ++j)
+            P[i][j] = std::max((i != j) * pfactor * P[i][j], 1e-12f);
+
+    struct Neighbours {
+        std::vector<int> indexes;
+        ML::distribution<float> probs;
+    };
+
+    std::vector<Neighbours> exampleNeighbours;
+
+    // Create a list of nearest neighbours and a probability distribution
+    // for each point
+    for (unsigned j = 0;  j < nx;  ++j) {
+        //... fill in neighbours ...
+        fillInNeighbours();
+    }
+
+    // Z * Frep
+    boost::multi_array<float, 2> FrepZ(boost::extents[nx][nd]);
+
+    // Y delta
+    boost::multi_array<float, 2> dY(boost::extents[nx][nd]);
+
+    // Last change in Y; so that we can see if we're going in the same dir
+    boost::multi_array<float, 2> iY(boost::extents[nx][nd]);
+
+    // Per-variable factors to multiply the gradient by to improve convergence
+    boost::multi_array<float, 2> gains(boost::extents[nx][nd]);
+    std::fill(gains.data(), gains.data() + gains.num_elements(), 1.0f);
+
+
+    double cost = INFINITY;
+    double last_cost = INFINITY;
+    
+    if (callback
+        && !callback(-1, cost, "init")) return Y;
+
+    for (int iter = 0;  iter < params.max_iter;  ++iter) {
+
+        // Find the bounding box for the quadtree
+        ML::distribution<float> mins(nd), maxs(nd);
+
+        for (unsigned j = 0;  j < nx;  ++j) {
+            ML::distribution<float> y(nd);
+            for (unsigned i = 0;  i < nd;  ++i)
+                y[i] = Y[j][i];
+            
+            if (j == 0)
+                mins = maxs = y;
+            else {
+                y.min_max(mins, maxs);
+            }
+        }
+
+        // Create the quadtree for this iteration
+        QCoord minc(mins.begin(), mins.end()), maxc(maxs.begin(), maxs.end());
+
+        Quadtree qtree(minc, maxc);
+
+        // Insert the values into the quadtree
+        for (unsigned i = 0;  i < nx;  ++i) {
+            QCoord coord(nd);
+            for (unsigned j = 0;  j < nd;  ++j) {
+                coord[j] = Y[i][j];
+            }
+
+            qtree.insert(coord);
+        }
+        
+        ExcAssertEqual(qtree.root->numChildren, nx);
+
+        // Do we calculate the cost?
+        bool calc_cost = iter < 10 || (iter + 1) % 10 == 0 || iter == params.max_iter - 1;
+
+        // Approximation for Z, accumulated here
+        double ZApprox = 0.0;
+
+        // Each example proceeds more or less independently
+        for (unsigned x = 0;  x < nx;  ++x) {
+
+            // Clear the updates
+            for (unsigned i = 0;  i < nd;  ++i) {
+                dY[x][i] = 0.0;
+                FrepZ[x][i] = 0.0;
+            }
+
+            const Neighbours & neighbours = exampleNeighbours[x];
+
+            distribution<float> y(nd);
+            for (unsigned i = 0;  i < nd;  ++i)
+                y[i] = Y[x][i];
+
+            // For each neighbour, calculate the attractive force.  The
+            // others are defined as zero.
+            for (unsigned q = 0;  q < neighbours.indexes.size();  ++q) {
+
+                unsigned j = neighbours.indexes[q];
+
+                double D = 0.0;
+                if (nd == 2) {
+                    float d0 = y[0] - Y[j][0];
+                    float d1 = y[1] - Y[j][1];
+                    D = d0 * d0 + d1 * d1;
+                } else {
+                    for (unsigned i = 0;  i < nd;  ++i) {
+                        D += (y[i] - Y[j][i]) * (y[i] - Y[j][i]);
+                    }
+                }
+
+                // Note that 1/(1 + D[j]) == Q[j] * Z
+                // See van der Marten, 2013 http://arxiv.org/pdf/1301.3342.pdf
+                // Barnes-Hut-SNE
+
+                float factorAttr = neighbours.probs[q] / (1.0f + D);
+
+                if (nd == 2) {
+                    float dYj0 = y[0] - Y[j][0];
+                    float dYj1 = y[1] - Y[j][1];
+                    dY[x][0] += dYj0 * factorAttr;
+                    dY[x][1] += dYj1 * factorAttr;
+                }
+                else {
+                    for (unsigned i = 0;  i < nd;  ++i) {
+                        double dYji = y[i] - Y[j][i];
+                        dY[x][i] += dYji * factorAttr;
+                    }
+                }
+            }
+
+            // Working storage for onNode
+            ML::distribution<float> com(nd);
+
+            // Used to traverse the quadtree for the Ys
+            auto onNode = [&] (const QuadtreeNode & node, int depth)
+                {
+                    double dist;
+                
+                    if (nd == 2) {
+                        float ncr = 1.0 / node.numChildren;
+                        com[0] = (node.centerOfMass[0] * ncr) - y[0];
+                        com[1] = (node.centerOfMass[1] * ncr) - y[1];
+                        dist = sqrt(com[0] * com[0] + com[1] * com[1]);
+                    }
+                    else {
+
+                        // 1.  Calculate the distance between this y point and the
+                        //     node center
+                        std::copy(node.centerOfMass.begin(),
+                                  node.centerOfMass.end(),
+                                  com.begin());
+
+                        // Normalized by number of children
+                        com *= 1.0 / node.numChildren;
+
+                        // Turn into a distance from y
+                        com -= y;
+
+                        dist = com.two_norm();
+                    }
+
+                    double diag = node.diagonalLength();
+                    double ratio = diag / dist;
+
+                    //cerr << "dist = " << dist << " diag = " << diag
+                    //     << " ratio = " << ratio << endl;
+
+                    if (node.numChildren == 1 || ratio < 0.4) {
+
+                        if (weAreInThisNode) {
+                            subtractOurEffect();
+                        }
+                        
+                        // Stop here
+
+                        //if (node.numChildren > 1)
+                        //    cerr << "early stop with " << node.numChildren
+                        //         << " children" << endl;
+
+                        double qCellZ = node.numChildren / (1.0 + dist * dist);
+
+                        ZApprox += qCellZ;
+
+                        for (unsigned i = 0;  i < nd;  ++i) {
+                            FrepZ[x][i] += com[i] * qCellZ * qCellZ;
+                        }
+
+                        return false;
+                    }
+
+                    return true;  // continue recursing
+                };
+
+            qtree.root->walk(onNode);
+        }
+
+        double Zrecip = 1.0 / ZApprox;
+
+        for (unsigned x = 0;  x < nx;  ++x) {
+            for (unsigned i = 0;  i < nd;  ++i) {
+                dY[x][i] += FrepZ[x][i] * Zrecip;
+            }
+        }
+
+        double cost2 = costGoesHere();
+        if (calc_cost) {
+            last_cost = cost;
+            cost = cost2;
+
+            if (isfinite(cost) && cost == last_cost) {
+                // converged
+                break;
+            }
+        }
+
+        /*********************************************************************/
+        // Update
+
+        float momentum = (iter < 20
+                          ? params.initial_momentum
+                          : params.final_momentum);
+
+        tsne_update(Y, dY, iY, gains, iter == 0, momentum, params.eta,
+                    params.min_gain);
+
+        if (callback
+            && !callback(iter, cost, "update")) return Y;
+
+
+        /*********************************************************************/
+        // Recenter about the origin
+
+        recenter_about_origin(Y);
+
+        if (callback
+            && !callback(iter, cost, "recenter")) return Y;
+
+
+        // Stop lying about P values if we're finished
+        if (iter == 100) {
+            for (unsigned i = 0;  i < nx;  ++i)
+                for (unsigned j = 0;  j < nx;  ++j)
+                    P[i][j] *= 0.25f;
+        }
+    }
+
+    return Y;
+}
+
+#endif
+
+ML::distribution<float>
+retsne(const ML::distribution<float> & probs_,
+       const boost::multi_array<float, 2> & prevOutput,
+       const TSNE_Params & params)
+{
+    int nx = prevOutput.shape()[0];
+    int nd = prevOutput.shape()[1];
+
+    ML::distribution<float> mins(nd), maxs(nd);
+    std::vector<ML::distribution<float> > Y(nx, ML::distribution<float>(nd));
+
+    for (unsigned i = 0;  i < nx;  ++i) {
+        for (unsigned j = 0;  j < nd;  ++j) {
+            Y[i][j] = prevOutput[i][j];
+        }
+        if (i == 0)
+            mins = maxs = Y[i];
+        else {
+            Y[i].min_max(mins, maxs);
+        }
+        //cerr << "input " << i << " is " << Y[i] << " with prob " << probs[i] << endl;
+    }
+
+    QCoord minc(mins.begin(), mins.end()), maxc(maxs.begin(), maxs.end());
+
+    Quadtree qtree(minc, maxc);
+
+    for (unsigned i = 0;  i < nx;  ++i) {
+        QCoord coord(nd);
+        for (unsigned j = 0;  j < nd;  ++j) {
+            coord[j] = prevOutput[i][j];
+        }
+
+        qtree.insert(coord);
+    }
+
+    int numNodes = qtree.root->finish(0);
+
+    //cerr << "quadtree had " << numNodes << " nodes for " << qtree.root->numChildren
+    //     << " children" << endl;
+
+    ExcAssertEqual(qtree.root->numChildren, nx);
+
+    distribution<float> probs = probs_;
+
+    //cerr << "input perplexity is " << perplexity(probs_) << endl;
+    //cerr << "input probs total " << probs_.total() << " min " << probs.min()
+    //     << " max " << probs.max() << endl;
+
+    // 1.  Calculate the probabilities.  We can start at the origin
+
+    //cerr << "nd = " << nd << " nx = " << nx << endl;
+
+
+    probs.normalize();
+
+    std::vector<std::pair<float, int> > probsSorted;
+    for (unsigned i = 0;  i < probs.size();  ++i) {
+        probsSorted.emplace_back(probs[i], i);
+    }
+
+    std::sort(probsSorted.begin(), probsSorted.end());
+    std::reverse(probsSorted.begin(), probsSorted.end());
+
+    //cerr << "probsSorted = " << probsSorted << endl;
+
+    double probsTotal = 0.0;
+    int numNeeded = -1;
+    for (unsigned i = 0;  i < probsSorted.size();  ++i) {
+        probsTotal += probsSorted[i].first;
+        if (probsTotal > 0.99) {
+            numNeeded = i;
+            break;
+        }
+    }
+
+    // Start off at the Y of the point with the highest probability, to get faster
+    // convergance
+    ML::distribution<float> y(nd);
+
+    y = Y[probsSorted[0].second];
+
+    // Restricted subset of neighbours used to approximate attractive
+    // force.
+    vector<int> neighbours;
+    ML::distribution<float> neighbourProbs;
+    for (unsigned i = 0;  i < numNeeded && i < 60;  ++i) {
+        neighbours.push_back(probsSorted[i].second);
+        neighbourProbs.push_back(probsSorted[i].first);
+    }
+
+    neighbourProbs.normalize();
+
+    // Now for each node, figure out which of the neighbour points are there
+    
+    std::vector<ML::compact_vector<int, 3> > nodeNeighbours(numNodes);
+
+    // Create a new coordinate for each neighbour
+    std::vector<QCoord> neighbourCoords(neighbours.size());
+
+    for (unsigned i = 0;  i < neighbours.size();  ++i) {
+        neighbourCoords[i] = QCoord(&Y[neighbours[i]][0], &Y[neighbours[i]][0] + nd);
+    }
+
+    // Now traverse the quadtree, splitting up the list of neighbours so that we
+    // have a list of them at each node
+    std::function<void (QuadtreeNode & node, const std::vector<int> &) > distributeNeighbours
+        = [&] (QuadtreeNode & node,
+               const std::vector<int> & neighbours)
+        {
+            nodeNeighbours[node.nodeNumber].insert
+                (nodeNeighbours[node.nodeNumber].begin(),
+                 neighbours.begin(), neighbours.end());
+            
+            if (node.type == QuadtreeNode::TERMINAL) {
+                ExcAssertEqual(neighbours.size(), 1);
+                ExcAssertEqual(neighbourCoords[neighbours[0]],
+                               node.centerOfMass);
+            }
+            else {
+                std::map<int, std::vector<int> > quadrants;
+
+                for (auto & n: neighbours) {
+                    quadrants[node.quadrant(node.center, neighbourCoords[n])].push_back(n);
+                }
+
+                for (auto & q: quadrants) {
+                    auto it = node.quadrants.find(q.first);
+                    ExcAssert(it != node.quadrants.end());
+                    distributeNeighbours(*it->second, q.second);
+                }
+            }
+        };
+
+    // Distribute all neighbours across the quadtree
+    vector<int> iota;
+    for (unsigned i = 0;  i < neighbours.size();  ++i)
+        iota.push_back(i);
+
+    distributeNeighbours(*qtree.root, iota);
+
+    //cerr << "done distributing" << endl;
+
+    //y = {0.0, 0.0};
+    //y = { -95.387, -55.4707 };
+
+    double lastC = INFINITY;
+
+    //ML::distribution<double> D(nx);
+    //ML::distribution<double> Q(nx);
+
+    float D[nx], Q[nx];
+    //distribution<float> D(nx), Q(nx);
+
+    for (unsigned iter = 0;  iter < 1000;  ++iter) {
+
+        // Y gradients
+        double dy[nd];
+        std::fill(dy, dy + nd, 0.0);
+
+        // Y gradients
+        double Fattr[nd];
+        std::fill(Fattr, Fattr + nd, 0.0);
+
+#if 0
+        // Attractive force, completely separated from the repulsive
+        // force.
+        // Note that we eventually want to use a sparse approximation
+        // to probs to avoid doing all j values.
+        for (unsigned j = 0;  j < nx;  ++j) {
+            double D = 0.0;
+            if (nd == 2) {
+                float d0 = y[0] - Y[j][0];
+                float d1 = y[1] - Y[j][1];
+                D = d0 * d0 + d1 * d1;
+            } else {
+                for (unsigned i = 0;  i < nd;  ++i) {
+                    D += (y[i] - Y[j][i]) * (y[i] - Y[j][i]);
+                }
+            }
+
+            // Note that 1/(1 + D[j]) == Q[j] * Z
+            // See van der Marten, 2013 http://arxiv.org/pdf/1301.3342.pdf
+            // Barnes-Hut-SNE
+
+            float factorAttr = probs[j] / (1.0f + D);
+
+            if (nd == 2) {
+                float dYj0 = y[0] - Y[j][0];
+                float dYj1 = y[1] - Y[j][1];
+                Fattr[0] += dYj0 * factorAttr;
+                Fattr[1] += dYj1 * factorAttr;
+            }
+            else {
+                for (unsigned i = 0;  i < nd;  ++i) {
+                    double dYji = y[i] - Y[j][i];
+                    Fattr[i] += dYji * factorAttr;
+                }
+            }
+        }
+#endif
+
+        //cerr << "iter " << iter << " y = " << y;
+        //for (unsigned i = 0;  i < nd;  ++i) {
+        //    cerr << " fattr[" << i << "] = " << Fattr[i]
+        //         << " approx = " << FattrApprox[i];
+        //}
+        //cerr << endl;
+        
+        // Approximate solution to the repulsive force
+
+        bool calcC = iter % 20 == 0;
+        double C = 0.0;
+
+        double ZApprox = 0.0;
+        double FrepZApprox[nd];
+        std::fill(FrepZApprox, FrepZApprox + nd, 0.0);
+
+        ML::distribution<float> com(nd);
+
+        float logqZ[neighbours.size()];
+        std::fill(logqZ, logqZ + neighbours.size(), std::numeric_limits<float>::quiet_NaN());
+
+        auto onNode = [&] (const QuadtreeNode & node, int depth)
+            {
+                double dist;
+                
+                if (nd == 2) {
+                    float ncr = 1.0 / node.numChildren;
+                    com[0] = (node.centerOfMass[0] * ncr) - y[0];
+                    com[1] = (node.centerOfMass[1] * ncr) - y[1];
+                    dist = sqrt(com[0] * com[0] + com[1] * com[1]);
+                }
+                else {
+
+                    // 1.  Calculate the distance between this y point and the
+                    //     node center
+                    std::copy(node.centerOfMass.begin(),
+                              node.centerOfMass.end(),
+                              com.begin());
+
+                    // Normalized by number of children
+                    com *= 1.0 / node.numChildren;
+
+                    // Turn into a distance from y
+                    com -= y;
+
+                    dist = com.two_norm();
+                }
+
+                double diag = node.diagonalLength();
+                double ratio = diag / dist;
+
+                //cerr << "dist = " << dist << " diag = " << diag
+                //     << " ratio = " << ratio << endl;
+
+                if (node.numChildren == 1 || ratio < 0.4) {
+                    // Stop here
+
+                    //if (node.numChildren > 1)
+                    //    cerr << "early stop with " << node.numChildren
+                    //         << " children" << endl;
+
+                    double qCellZ = node.numChildren / (1.0 + dist * dist);
+
+                    ZApprox += qCellZ;
+
+                    for (unsigned i = 0;  i < nd;  ++i) {
+                        FrepZApprox[i] += com[i] * qCellZ * qCellZ;
+                    }
+
+                    // If we want to calculate C, we store the log of
+                    // the cell's Q * Z for each point of interest so that
+                    // we can calculate the cost later.
+                    if (calcC) {
+                        auto & neighbours = nodeNeighbours[node.nodeNumber];
+                        if (!neighbours.empty()) {
+                            float logqCellZ = logf(qCellZ);
+                            for (int neighbour: neighbours) {
+                                logqZ[neighbour] = logqCellZ;
+                            }
+                        }
+                    }
+                    return false;
+                }
+
+                return true;  // continue recursing
+            };
+
+        qtree.root->walk(onNode);
+
+        double FrepApprox[nd];
+        for (unsigned i = 0;  i < nd;  ++i) {
+            FrepApprox[i] = FrepZApprox[i] / ZApprox;
+        }
+
+        double FattrApprox[nd];
+        std::fill(FattrApprox, FattrApprox + nd, 0.0);
+
+        for (unsigned q = 0;  q < neighbours.size();  ++q) {
+            unsigned j = neighbours[q];
+
+            double D = 0.0;
+            if (nd == 2) {
+                float d0 = y[0] - Y[j][0];
+                float d1 = y[1] - Y[j][1];
+                D = d0 * d0 + d1 * d1;
+            } else {
+                for (unsigned i = 0;  i < nd;  ++i) {
+                    D += (y[i] - Y[j][i]) * (y[i] - Y[j][i]);
+                }
+            }
+
+            // Note that 1/(1 + D[j]) == Q[j] * Z
+            // See van der Marten, 2013 http://arxiv.org/pdf/1301.3342.pdf
+            // Barnes-Hut-SNE
+
+            float factorAttr = neighbourProbs[q] / (1.0f + D);
+
+            if (nd == 2) {
+                float dYj0 = y[0] - Y[j][0];
+                float dYj1 = y[1] - Y[j][1];
+                FattrApprox[0] += dYj0 * factorAttr;
+                FattrApprox[1] += dYj1 * factorAttr;
+            }
+            else {
+                for (unsigned i = 0;  i < nd;  ++i) {
+                    double dYji = y[i] - Y[j][i];
+                    FattrApprox[i] += dYji * factorAttr;
+                }
+            }
+
+            //if (calcC) {
+            //    C += probs[j] * (log(probs[j]) - logQ(probs[j]));
+            //}
+        }
+
+        // C = sum ( p log p/q ) = sum (p log p) - sum (p log q)
+        //   
+
+        double Z = 0.0;
+
+        //for (unsigned j = 0;  j < nx;  ++j) {
+        //    auto dist = y - Y[j];
+        //    D[j] = dist.dotprod(dist);
+        //    Q[j] = 1.0f / (1.0f + D[j]);
+        //    Z += Q[j];
+        //}
+
+        //cerr << "Z = " << Z << " Zapprox = " << ZApprox << endl;
+
+        //for (unsigned j = 0;  j < nx;  ++j) {
+        //    Q[j] /= Z;
+        //    distribution<float> dYj = y - Y[j];
+        //    dy += (probs[j] - Q[j]) * dYj / (1.0 + D[j]);
+        //    if (calcC)
+        //        C += probs[j] * logf(probs[j] / Q[j]);
+        //}
+
+        double Capprox = 0.0;
+        if (calcC) {
+            float logZ = log(ZApprox);
+            for (unsigned q = 0;  q < neighbours.size();  ++q) {
+                // log (Z * qj) = logZ + log qj, so log qj = log (Z * qj) - log Z
+
+                float logqj = logqZ[q] - logZ;
+                Capprox += neighbourProbs[q] * (logf(neighbourProbs[q]) - logqj);
+            }
+        }
+
+        double Frep[nd];
+        std::fill(Frep, Frep + nd, 0.0);
+
+        if (calcC && false) {
+
+            // Square of pythagorean distances of this point from each other
+            // point in low dimensional space
+            for (unsigned j = 0;  j < nx;  ++j) {
+                D[j] = 0.0;
+                if (nd == 2) {
+                    float d0 = y[0] - Y[j][0];
+                    float d1 = y[1] - Y[j][1];
+                    D[j] = d0 * d0 + d1 * d1;
+                } else {
+                    for (unsigned i = 0;  i < nd;  ++i) {
+                        D[j] += (y[i] - Y[j][i]) * (y[i] - Y[j][i]);
+                    }
+                }
+
+                //auto dist = y - Y[j];
+                //D[j] = dist.dotprod(dist);
+                Q[j] = 1.0f / (1.0f + D[j]);
+                Z += Q[j];
+            }
+
+
+            for (unsigned j = 0;  j < nx;  ++j) {
+                Q[j] /= Z;
+            }
+
+            for (unsigned j = 0;  j < nx;  ++j) {
+                // Repulsive force
+                float factorRep = Q[j] * Z * Q[j];
+
+                if (nd == 2) {
+                    float dYj0 = y[0] - Y[j][0];
+                    float dYj1 = y[1] - Y[j][1];
+                    Frep[0] -= dYj0 * factorRep;
+                    Frep[1] -= dYj1 * factorRep;
+                }
+                else {
+                    for (unsigned i = 0;  i < nd;  ++i) {
+                        double dYji = y[i] - Y[j][i];
+                        Frep[i] -= dYji * factorRep;
+                    }
+                }
+
+                //C += probs[j] * logf(probs[j] / Q[j]);
+            }
+
+            //for (unsigned q = 0;  q < neighbours.size();  ++q) {
+            //    float p = neighbourProbs[q];
+            //    C += p * logf(p / Q[neighbours[q]]);
+            //}
+
+            //cerr << "Capprox = " << Capprox << " C = " << C << endl;
+            //cerr << "iter " << iter << " y = " << y << " C = " << C;
+            //for (unsigned i = 0;  i < nd;  ++i) {
+            //    cerr << " frep[" << i << "] = " << Frep[i]
+            //         << " approx = " << FrepApprox[i];
+            //}
+            //cerr << endl;
+        }
+
+        C = Capprox;
+
+#if 0
+        for (unsigned i = 0;  i < nd;  ++i) {
+            dy[i] += Frep[i];
+        }
+#else
+        for (unsigned i = 0;  i < nd;  ++i) {
+            dy[i] += FrepApprox[i];
+        }
+
+#endif
+
+#if 0
+        for (unsigned i = 0;  i < nd;  ++i) {
+            dy[i] += Fattr[i];
+        }
+#else
+        for (unsigned i = 0;  i < nd;  ++i) {
+            dy[i] += FattrApprox[i];
+        }
+
+#endif
+
+        //dy *= 2.0;
+
+        //cerr << "iter " << iter << " C = " << C << " y = " << y
+        //     << " dY = " << dy << endl;
+            
+        if (calcC) {
+            if (fabs(C - lastC) < 0.00001) {
+                //cerr << "converged after " << iter << " iterations" << endl;
+                break;
+            }
+            lastC = C;
+        }
+
+        for (unsigned i = 0;  i < nd;  ++i)
+            y[i] -= 100.0 * dy[i];
+
+        //y -= 100.0 * dy;
+
+        //cerr << "dy = " << dy << " dy_num = " << dY_num << " y now " << y << endl;
+    }
+
+    return y;
+}
+
+
+#if 0
+        auto calcD = [&] (const distribution<double> & y)
+            {
+                ML::distribution<double> D(nx);
+
+                for (unsigned i = 0;  i < nx;  ++i) {
+                    auto dist = y - Y[i];
+                    D[i] = dist.dotprod(dist);
+                }
+
+                return D;
+            };
+
+        auto calcQ = [&] (const distribution<double> & y,
+                          const distribution<double> & D)
+            {
+                ML::distribution<double> Q(nx);
+                
+                double QTotal = 0.0;
+                for (unsigned i = 0;  i < nx;  ++i) {
+                    Q[i] = 1.0 / (1.0 + D[i]);
+                    QTotal += Q[i];
+                }
+
+                Q /= QTotal;
+
+                return Q;
+            };
+
+        auto calcC = [&] (const distribution<double> & y)
+            {
+                auto D = calcD(y);
+                auto Q = calcQ(y, D);
+
+                double C = 0.0;
+                for (unsigned j = 0;  j < nx;  ++j) {
+                    C += probs[j] * log(probs[j] / Q[j]);
+                }
+
+                return C;
+            };
+
+        auto dQdy = [&] (const distribution<double> & y)
+            {
+                vector<distribution<double> > result(nd);
+                double d = 0.0000001;
+
+                auto D = calcD(y);
+                auto Q = calcQ(y, D);
+                
+                for (unsigned j = 0;  j < nd;  ++j) {
+                    auto ydash = y;
+                    ydash[j] += d;
+                    auto Ddash = calcD(ydash);
+                    auto Qdash = calcQ(ydash, Ddash);
+                    result[j] = (Qdash - Q) / d;
+                }
+
+                return result;
+            };
+#endif
+
+#if 0
+        double d = 0.0000001;
+        distribution<double> dY_num(nd);
+        
+        for (unsigned i = 0;  i < nd;  ++i) {
+            distribution<double> delta(nd);
+            delta[i] = d;
+            double Cdash = calcC(y.cast<double>() + delta);
+            dY_num[i] = (Cdash - C) / d;
+        }
+#endif
+
 
 } // namespace ML
