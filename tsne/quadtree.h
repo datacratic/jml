@@ -19,8 +19,8 @@ struct QuadtreeNode {
     /** Construct with a single child. */
     QuadtreeNode(QCoord mins, QCoord maxs, QCoord child)
         : mins(mins), maxs(maxs), type(TERMINAL),
-          numChildren(1), centerOfMass(child), parentNodeNumber(-1),
-          nodeNumber(-1)
+          numChildren(1), child(child), centerOfMass(child),
+          parentNodeNumber(-1), nodeNumber(-1)
     {
         center.resize(mins.size());
         for (unsigned i = 0;  i < mins.size();  ++i) {
@@ -51,6 +51,7 @@ struct QuadtreeNode {
     } type;
 
     int numChildren;   ///< Number of children in this part of tree
+    QCoord child;         ///< Child node itself
     QCoord centerOfMass;  ///< Center of mass of children, or child if terminal
 
     int parentNodeNumber;  ///< Node number of the parent node
@@ -60,9 +61,17 @@ struct QuadtreeNode {
     std::map<int, std::unique_ptr<QuadtreeNode> > quadrants;
 
     /** Insert the given point into the tree. */
-    void insert(QCoord point)
+    void insert(QCoord point, int depth = 0, int n = 1)
     {
         ExcAssertEqual(point.size(), mins.size());
+
+        if (depth > 100) {
+            using namespace std;
+            cerr << "infinite depth tree: point " << point
+                 << " center " << center << " mins " << mins
+                 << " maxs " << maxs << endl;
+            ExcAssert(false);
+        }
 
         // Make sure that the point fits within the cell
         for (unsigned i = 0;  i < point.size();  ++i) {
@@ -78,8 +87,9 @@ struct QuadtreeNode {
         if (type == EMPTY) {
             // Easy case: first insertion into root of tree
             type = TERMINAL;
+            child = point;
             centerOfMass = point;
-            numChildren = 1;
+            numChildren = n;
         }
         else if (type == NODE) {
             // Insertion into an existing quad
@@ -100,21 +110,29 @@ struct QuadtreeNode {
                 quadrants[quad].reset(new QuadtreeNode(newMins, newMaxs, point));
             } else {
                 // Recurse down into existing quadrant
-                it->second->insert(point);
+                it->second->insert(point, depth + 1);
             }
-            
-            ++numChildren;
+
+            numChildren += n;
             
             for (unsigned i = 0;  i < point.size();  ++i) {
-                centerOfMass[i] += point[i];
+                centerOfMass[i] += n * point[i];
             }
         }
         else if (type == TERMINAL) {
-            // First we convert to a non-terminal
-            convertToNonTerminal();
-
-            // Then we insert a new one
-            insert(point);
+            // Is this the same point?  If so, we add a count to it
+            if (point == child) {
+                numChildren += n;
+                for (unsigned i = 0;  i < point.size();  ++i)
+                    centerOfMass[i] += n * point[i];
+            }
+            else {
+                // First we convert to a non-terminal
+                convertToNonTerminal(depth);
+                
+                // Then we insert a new one
+                insert(point, depth, n);
+            }
         }
     }
     
@@ -150,8 +168,17 @@ struct QuadtreeNode {
         return currentNodeNumber;
     }
 
+    static float sqr(float val)
+    {
+        return val * val;
+    }
+
     double diagonalLength() const
     {
+        if (mins.size() == 2) {
+            return sqrt(sqr(maxs[0] - mins[0]) + sqr(maxs[1] - mins[1]));
+        }
+
         double result = 0.0;
         for (unsigned i = 0;  i < mins.size();  ++i) {
             float dist = maxs[i] - mins[i];
@@ -162,11 +189,12 @@ struct QuadtreeNode {
     }
 
     /** Convert a node to a non-terminal. */
-    void convertToNonTerminal()
+    void convertToNonTerminal(int depth)
     {
         ExcAssertEqual(type, TERMINAL);
 
-        QCoord oldChild = centerOfMass;
+        QCoord oldChild = child;
+        int n = numChildren;
         centerOfMass.clear();
         centerOfMass.resize(oldChild.size());
         numChildren = 0;
@@ -175,7 +203,7 @@ struct QuadtreeNode {
         type = NODE;
 
         // Insert the current child and clear it
-        insert(oldChild);
+        insert(oldChild, depth, n);
     }
 
     // Return which quadrant the given point is in
@@ -187,6 +215,27 @@ struct QuadtreeNode {
             result = result | ((point[i] < center[i]) << i);
         }
         return result;
+    }
+
+    // Is this point in the quadrant?
+    template<typename Point>
+    bool contains(const Point & point) const
+    {
+        if (point.size() == 2) {
+            return point[0] >= mins[0]
+                && point[1] >= mins[1]
+                && point[0] < maxs[0]
+                && point[1] < maxs[1];
+        }
+
+        for (unsigned i = 0;  i < mins.size();  ++i) {
+            if (point[i] < mins[i])
+                return false;
+            if (point[i] >= maxs[i])
+                return false;
+        }
+
+        return true;
     }
 };
 

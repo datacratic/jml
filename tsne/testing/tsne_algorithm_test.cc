@@ -14,6 +14,7 @@
 #include <boost/multi_array.hpp>
 #include <boost/tuple/tuple.hpp>
 #include "jml/tsne/tsne.h"
+#include "jml/arch/timers.h"
 #include <boost/assign/list_of.hpp>
 #include <limits>
 #include <boost/test/floating_point_comparison.hpp>
@@ -32,6 +33,8 @@ X sqr(X x)
 {
     return x * x;
 }
+
+#if 1
 
 BOOST_AUTO_TEST_CASE( test_vectors_to_distances )
 {
@@ -235,6 +238,9 @@ BOOST_AUTO_TEST_CASE( test_small )
     boost::multi_array<float, 2> reduction JML_UNUSED
         = tsne(probabilities, 2);
 
+    boost::multi_array<float, 2> reductionAppox JML_UNUSED
+        = tsne(probabilities, 2);
+
     // Now try to rerun t-SNE on a point that is identical to one of the others
     distribution<float> probs(nx - 1);
     for (unsigned i = 1;  i < nx;  ++i)
@@ -243,7 +249,76 @@ BOOST_AUTO_TEST_CASE( test_small )
     boost::multi_array<float, 2> reduction2(boost::extents[nx - 1][2]);
 
     for (unsigned i = 1;  i < nx;  ++i) {
+        for (unsigned j = 0;  j < 2;  ++j) {
+            reduction2[i - 1][j] = reduction[i][j];
+        }
+    }
+
+    cerr << "probs = " << probs << endl;
+
+    distribution<float> real(2);
+    for (unsigned i = 0;  i < 2;  ++i)
+        real[i] = reduction[0][i];
+
+    cerr << "real = " << real << endl;
+
+    auto res = retsne(probs, reduction2);
+
+    cerr << "res = " << res << endl;
+}
+#endif
+
+BOOST_AUTO_TEST_CASE( test_small_approx )
+{
+    string input_file = Environment::instance()["JML_TOP"]
+        + "/tsne/testing/mnist2500_X_min.txt.gz";
+
+    filter_istream stream(input_file);
+    Parse_Context context(input_file, stream);
+
+    int nd = 784;
+    int nx = 100;
+
+    boost::multi_array<float, 2> data(boost::extents[nx][nd]);
+
+    cerr << "loading " << nx << " examples...";
+    for (unsigned i = 0;  i < nx;  ++i) {
         for (unsigned j = 0;  j < nd;  ++j) {
+            float f = context.expect_float();
+            data[i][j] = f;
+            context.expect_whitespace();
+        }
+
+        context.expect_eol();
+    }
+    cerr << "done." << endl;
+
+    cerr << "converting to distances...";
+    boost::multi_array<float, 2> distances
+        = vectors_to_distances(data);
+    cerr << "done." << endl;
+
+    cerr << "converting to probabilities...";
+    boost::multi_array<float, 2> probabilities
+        = distances_to_probabilities(distances,
+                                     1e-5 /* tolerance */,
+                                     20.0 /* perplexity */);
+    cerr << "done." << endl;
+
+    boost::multi_array<float, 2> reduction JML_UNUSED
+        = tsneApprox(probabilities, 2);
+
+    cerr << "done approx t-SNE" << endl;
+
+    // Now try to rerun t-SNE on a point that is identical to one of the others
+    distribution<float> probs(nx - 1);
+    for (unsigned i = 1;  i < nx;  ++i)
+        probs[i - 1] = probabilities[0][i];
+
+    boost::multi_array<float, 2> reduction2(boost::extents[nx - 1][2]);
+
+    for (unsigned i = 1;  i < nx;  ++i) {
+        for (unsigned j = 0;  j < 2;  ++j) {
             reduction2[i - 1][j] = reduction[i][j];
         }
     }
@@ -261,7 +336,7 @@ BOOST_AUTO_TEST_CASE( test_small )
     cerr << "res = " << res << endl;
 }
 
-#if 0
+#if 1
 BOOST_AUTO_TEST_CASE( test_distance_to_probability_big )
 {
     string input_file = Environment::instance()["JML_TOP"]
@@ -303,8 +378,18 @@ BOOST_AUTO_TEST_CASE( test_distance_to_probability_big )
         = distances_to_probabilities(distances);
     cerr << "done." << endl;
 
+    Timer t;
+
     boost::multi_array<float, 2> reduction JML_UNUSED
-        = tsne(probabilities, 2);
+        = tsneApprox(probabilities, 2);
+
+    cerr << t.elapsed() << endl;
+
+    t.restart();
+
+    reduction = tsne(probabilities, 2);
+
+    cerr << t.elapsed() << endl;
 
 }
 #endif

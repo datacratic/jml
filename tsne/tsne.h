@@ -145,6 +145,15 @@ tsne(const boost::multi_array<float, 2> & probs,
      const TSNE_Params & params = TSNE_Params(),
      const TSNE_Callback & callback = TSNE_Callback());
 
+
+/** Approximate Barnes-Hut-SNE version of tSNE. */
+boost::multi_array<float, 2>
+tsneApprox(const boost::multi_array<float, 2> & probs,
+           int num_dims,
+           const TSNE_Params & params = TSNE_Params(),
+           const TSNE_Callback & callback = TSNE_Callback());
+
+
 /** Re-run t-SNE over the given high dimensional probability vector for a
     single example, figuring out where that example should be embedded in
     a fixed containing space from the main tsne computation.
