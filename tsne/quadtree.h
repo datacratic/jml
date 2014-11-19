@@ -26,6 +26,8 @@ struct QuadtreeNode {
         for (unsigned i = 0;  i < mins.size();  ++i) {
             center[i] = 0.5 * (mins[i] + maxs[i]);
         }
+
+        ExcAssert(contains(child));
     }
 
     /** Construct empty. */
@@ -75,8 +77,9 @@ struct QuadtreeNode {
 
         // Make sure that the point fits within the cell
         for (unsigned i = 0;  i < point.size();  ++i) {
-            if (point[i] < mins[i] || point[i] > maxs[i]) {
+            if (point[i] < mins[i] || point[i] >= maxs[i]) {
                 using namespace std;
+                cerr << "depth = " << depth << endl;
                 cerr << "point = " << point << endl;
                 cerr << "mins " << mins << endl;
                 cerr << "maxs " << maxs << endl;

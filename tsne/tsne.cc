@@ -1289,7 +1289,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
             P[i][j] = std::max((i != j) * pfactor * P[i][j], 1e-12f);
 
     // Do we force calculations to be made exactly?
-    bool forceExactSolution = false;
+    bool forceExactSolution = true;//false;
 
 
     struct Neighbours {
@@ -1330,7 +1330,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
         if (numToKeep > maxNeighbours)
             numToKeep = maxNeighbours;
 
-        if (forceExactSolution)
+        if (forceExactSolution || true)
             numToKeep = probs.size();
 
         // Resort to be in order of increasing index
@@ -1365,7 +1365,10 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
     // When we want to calculate the cost, we store log( Z q[i][j] ) in this
     // matrix, to be used later on for the cost computation
-    boost::multi_array<float, 2> logqZ(boost::extents[nx][nx]);
+    boost::multi_array<double, 2> logqZ(boost::extents[nx][nx]);
+
+    boost::multi_array<double, 2> FattrApprox(boost::extents[nx][nd]);
+    boost::multi_array<double, 2> FrepApprox(boost::extents[nx][nd]);
 
 
     double cost = INFINITY;
@@ -1397,6 +1400,11 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
         // Create the quadtree for this iteration
         QCoord minc(mins.begin(), mins.end()), maxc(maxs.begin(), maxs.end());
+
+        // Bounding boxes are open ended on the max side, so move to the next float
+        for (float & c: maxc) {
+            c = nextafterf(c, (float)INFINITY);
+        }
 
         Quadtree qtree(minc, maxc);
 
@@ -1464,10 +1472,9 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
         bool calcC = iter < 10 || (iter + 1) % 10 == 0 || iter == params.max_iter - 1;
 
         // Approximation for Z, accumulated here
-        double ZApprox = 0.0;
-
-        boost::multi_array<double, 2> FattrApprox(boost::extents[nx][nd]);
-        boost::multi_array<double, 2> FrepApprox(boost::extents[nx][nd]);
+        ML::Spinlock Zmutex;
+        std::vector<double> ZApproxValues;
+        ZApproxValues.reserve(nx);
 
         auto calcExample = [&] (int x)
             {
@@ -1513,7 +1520,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                     // Barnes-Hut-SNE
 
                     //float factorAttr = neighbours.probs[q] / (1.0f + D);
-                    float factorAttr = P[x][j] / (1.0f + D);
+                    double factorAttr = P[x][j] / (1.0 + D);
 
                     if (nd == 2) {
                         float dYj0 = y[0] - Y[j][0];
@@ -1534,6 +1541,8 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
                 int nodesTouched = 0;
 
+                double exampleZ = 0.0;
+
                 // Used to traverse the quadtree for the Ys
                 auto onNode = [&] (const QuadtreeNode & node, int depth)
                 {
@@ -1549,7 +1558,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
                     if (containsY) {
                         if (nd == 2) {
-                            float ncr = 1.0 / effectiveNumChildren;
+                            double ncr = 1.0 / effectiveNumChildren;
                             com[0] = ((node.centerOfMass[0] - y[0]) * ncr) - y[0];
                             com[1] = ((node.centerOfMass[1] - y[1]) * ncr) - y[1];
                             dist = sqrt(com[0] * com[0] + com[1] * com[1]);
@@ -1575,7 +1584,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                         }
                     } else {
                         if (nd == 2) {
-                            float ncr = 1.0 / node.numChildren;
+                            double ncr = 1.0 / node.numChildren;
                             com[0] = (node.centerOfMass[0] * ncr) - y[0];
                             com[1] = (node.centerOfMass[1] * ncr) - y[1];
                             dist = sqrt(com[0] * com[0] + com[1] * com[1]);
@@ -1609,8 +1618,22 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                         || (ratio < 0.4 && !forceExactSolution)) {
 
                         double qCellZ = effectiveNumChildren / (1.0 + dist * dist);
+                        if (qCellZ == 1.0) {
+                            cerr << "DISTANCE OF ZERO" << endl;
+                            cerr << "effectiveNumChildren = "
+                                 << effectiveNumChildren << endl;
+                            cerr << "node.numChildren = " << node.numChildren
+                                 << endl;
+                            cerr << "containsY = " << containsY << endl;
+                            cerr << "node.mins = " << node.mins << endl;
+                            cerr << "node.maxs = " << node.maxs << endl;
+                            cerr << "node.center = " << node.center << endl;
+                            cerr << "node.child = " << node.child << endl;
+                            cerr << "point = " << y << endl;
+                        }
 
-                        ZApprox += qCellZ;
+
+                        exampleZ += qCellZ;
 
                         for (unsigned i = 0;  i < nd;  ++i) {
                             FrepZ[x][i] += com[i] * qCellZ * qCellZ;
@@ -1622,7 +1645,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                         if (calcC) {
                             auto & contained = nodeContains[node.nodeNumber];
                             if (!contained.empty()) {
-                                float logqCellZ = logf(qCellZ);
+                                double logqCellZ = logf(qCellZ);
                                 for (int node: contained) {
                                     logqZ[x][node] = logqCellZ;
                                 }
@@ -1636,6 +1659,11 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                 };
 
                 qtree.root->walk(onNode);
+
+                {
+                    std::unique_lock<ML::Spinlock> guard(Zmutex);
+                    ZApproxValues.push_back(exampleZ);
+                }
 
                 if (x == 1026)
                     cerr << "touched " << nodesTouched << " of " << numNodes << " nodes"
@@ -1661,6 +1689,14 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
         }
 #endif
 
+        // Sort from smallest to largest to accumulate.  This minimises
+        // rounding errors and makes the result independent of the order
+        // in which threads finish.
+        std::sort(ZApproxValues.begin(), ZApproxValues.end());
+        double ZApprox = std::accumulate(ZApproxValues.begin(),
+                                         ZApproxValues.end(),
+                                         0.0);
+
         double Zrecip = 1.0 / ZApprox;
 
         for (unsigned x = 0;  x < nx;  ++x) {
@@ -1671,23 +1707,23 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
         double Capprox = 0.0;
         if (calcC) {
-            float logZ = log(ZApprox);
+            double logZ = log(ZApprox);
             for (unsigned x = 0;  x < nx;  ++x) {
                 for (unsigned j = 0;  j < nx;  ++j) {
                     if (x == j)
                         continue;
                     // log (Z * qj) = logZ + log qj, so log qj = log (Z * qj) - log Z
                     
-                    float logqj = logqZ[x][j] - logZ;
+                    double logqj = logqZ[x][j] - logZ;
                     Capprox += P[x][j] * (logf(P[x][j]) - logqj);
                 }
             }
         }
 
-#if 0  // exact calculations for verification        
+#if 1  // exact calculations for verification        
         double Z = 0.0, C = 0.0;
 
-        boost::multi_array<float, 2> Q(boost::extents[nx][nx]);
+        boost::multi_array<float, 2> QZ(boost::extents[nx][nx]);
         boost::multi_array<double, 2> Fattr(boost::extents[nx][nd]);
         boost::multi_array<double, 2> Frep(boost::extents[nx][nd]);
         
@@ -1699,11 +1735,23 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                 Fattr[x][i] = 0.0;
             }
 
-            // Attractive force, completely separated from the repulsive
-            // force.
             for (unsigned j = 0;  j < nx;  ++j) {
                 if (j == x)
                     continue;
+
+                //if (x == 0 && j == 1) {
+                //    cerr << "D[0][1] real   = " << D << " prob "
+                //         << P[x][j] << endl;
+                //}
+
+            }
+
+
+            for (unsigned j = 0;  j < nx;  ++j) {
+                if (j == x)
+                    continue;
+
+                // Distances, used to calculate Q and Z
                 double D = 0.0;
                 if (nd == 2) {
                     float d0 = y[0] - Y[j][0];
@@ -1715,18 +1763,17 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                     }
                 }
 
-                //if (x == 0 && j == 1) {
-                //    cerr << "D[0][1] real   = " << D << " prob "
-                //         << P[x][j] << endl;
-                //}
+                QZ[x][j] = 1.0 / (1.0 + D);
+                Z += QZ[x][j];
 
+                // Attractive force
                 // Note that 1/(1 + D[j]) == Q[x][j] * Z
 
-                float factorAttr = P[x][j] / (1.0f + D);
+                double factorAttr = P[x][j] * QZ[x][j];
 
                 if (nd == 2) {
-                    float dYj0 = y[0] - Y[j][0];
-                    float dYj1 = y[1] - Y[j][1];
+                    double dYj0 = y[0] - Y[j][0];
+                    double dYj1 = y[1] - Y[j][1];
                     Fattr[x][0] += dYj0 * factorAttr;
                     Fattr[x][1] += dYj1 * factorAttr;
                 }
@@ -1736,31 +1783,11 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                         Fattr[x][i] += dYji * factorAttr;
                     }
                 }
-            }
 
-            // Repulsive force.  Again, this is approximated separately
-
-            for (unsigned j = 0;  j < nx;  ++j) {
-                if (j == x)
-                    continue;
-
-                double D = 0.0;
-                if (nd == 2) {
-                    float d0 = y[0] - Y[j][0];
-                    float d1 = y[1] - Y[j][1];
-                    D = d0 * d0 + d1 * d1;
-                } else {
-                    for (unsigned i = 0;  i < nd;  ++i) {
-                        D += (y[i] - Y[j][i]) * (y[i] - Y[j][i]);
-                    }
-                }
-
-                Q[x][j] = 1.0f / (1.0f + D);
-                Z += Q[x][j];
             }
         }
 
-        //cerr << "ZApprox = " << ZApprox << " Z = " << Z << endl;
+        cerr << "ZApprox = " << ZApprox << " Z = " << Z << endl;
 
 
         for (unsigned x = 0;  x < nx;  ++x) {
@@ -1774,12 +1801,12 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                 if (j == x)
                     continue;
 
-                Q[x][j] /= Z;
+                double Qxj = QZ[x][j] / Z;
 
-                //Q[x][j] = std::max<float>(params.min_prob, Q[x][j]);
+                //Qxj = std::max<double>(params.min_prob, Qxj);
 
                 // Repulsive force
-                float factorRep = Q[x][j] * Z * Q[x][j];
+                float factorRep = Qxj * Z * Qxj;
 
                 if (nd == 2) {
                     float dYj0 = y[0] - Y[j][0];
@@ -1794,7 +1821,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                     }
                 }
 
-                C += P[x][j] * logf(P[x][j] / Q[x][j]);
+                C += P[x][j] * logf(P[x][j] / Qxj);
             }
         }
 #endif
@@ -1803,8 +1830,10 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
         for (unsigned x = 0;  x < nx;  ++x) {
             for (unsigned i = 0;  i < nd;  ++i) {
-                //dY[x][i] = 4.0 * (Fattr[x][i] + Frep[x][i]);
-                dY[x][i] = 4.0 * (FattrApprox[x][i] + FrepApprox[x][i]);
+                dY[x][i] = 4.0 * (Fattr[x][i] + Frep[x][i]);
+                //dY[x][i] = 4.0 * (FattrApprox[x][i] + Frep[x][i]);
+                //dY[x][i] = 4.0 * (Fattr[x][i] + FrepApprox[x][i]);
+                //dY[x][i] = 4.0 * (FattrApprox[x][i] + FrepApprox[x][i]);
 
 #if 0
                 if (x < 5) {
@@ -1910,6 +1939,11 @@ retsne(const ML::distribution<float> & probs_,
     }
 
     QCoord minc(mins.begin(), mins.end()), maxc(maxs.begin(), maxs.end());
+
+    // Bounding boxes are open ended on the max side, so move to the next float
+    for (float & c: maxc) {
+        c = nextafterf(c, (float)INFINITY);
+    }
 
     Quadtree qtree(minc, maxc);
 
