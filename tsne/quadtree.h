@@ -60,8 +60,7 @@ struct QuadtreeNode {
     int numChildren;   ///< Number of children in this part of tree
     QCoord child;         ///< Child node itself
     QCoord centerOfMass;  ///< Center of mass of children, or child if terminal
-    float recipNumChildren;
-    float recipNumChildrenMinusOne;
+    float recipNumChildren[2];  //< 1/numChildren, 1/(numChildren-1
 
     int parentNodeNumber;  ///< Node number of the parent node
     int nodeNumber;        ///< Number of this node; calculated by finish()
@@ -171,8 +170,8 @@ struct QuadtreeNode {
         this->parentNodeNumber = parentNodeNumber;
         nodeNumber = currentNodeNumber;
         ++currentNodeNumber;
-        recipNumChildren = 1.0 / numChildren;
-        recipNumChildrenMinusOne = 1.0 / (numChildren - 1);
+        recipNumChildren[0] = 1.0 / numChildren;
+        recipNumChildren[1] = 1.0 / (numChildren - 1);
 
         for (auto & q: quadrants) {
             currentNodeNumber

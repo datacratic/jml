@@ -475,16 +475,42 @@ BOOST_AUTO_TEST_CASE( test_distance_to_probability_big )
         = distances_to_probabilities(distances);
     cerr << "done." << endl;
 
-    Timer t;
+#if 0
+    boost::multi_array<float, 2> probabilities2
+        = probabilities + transpose(probabilities);
+
+    
+
+
+    std::vector<TsneSparseProbs> sparseProbs(nx);
+    for (unsigned i = 0;  i < nx;  ++i) {
+        for (unsigned j = 0;  j < nx;  ++j) {
+            if (i == j)
+                continue;
+            sparseProbs[i].indexes.push_back(j);
+            sparseProbs[i].probs.push_back(probabilities[i][j]);
+        }
+    }
 
     boost::multi_array<float, 2> reduction JML_UNUSED
-        = tsneApprox(probabilities, 2);
+        = tsneApproxFromSparse(sparseProbs, 2);
+#endif
+
+    Timer t;
+
+    TSNE_Params params;
+    params.numNeighbours = 60;//2499;
+
+    cerr << "doing sparse t-SNE" << endl;
+    boost::multi_array<float, 2> reduction JML_UNUSED
+        = tsneApproxFromCoords(data, 2, params);
 
     cerr << t.elapsed() << endl;
 
     t.restart();
 
-    reduction = tsne(probabilities, 2);
+    boost::multi_array<float, 2> reduction2 JML_UNUSED
+        = tsne(probabilities, 2);
 
     cerr << t.elapsed() << endl;
 

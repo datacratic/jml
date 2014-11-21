@@ -11,6 +11,7 @@
 #include "jml/stats/distribution_simd.h"
 #include "jml/utils/vector_utils.h"
 #include "jml/utils/pair_utils.h"
+#include "jml/utils/lightweight_hash.h"
 #include "jml/algebra/matrix_ops.h"
 #include "jml/arch/simd_vector.h"
 #include <boost/tuple/tuple.hpp>
@@ -29,6 +30,7 @@
 #include <boost/bind.hpp>
 #include "jml/utils/environment.h"
 #include "quadtree.h"
+#include "vantage_point_tree.h"
 
 using namespace std;
 
@@ -1005,6 +1007,26 @@ void recenter_about_origin(boost::multi_array<Float, 2> & Y)
 }
 
 boost::multi_array<float, 2>
+tsne_init(int nx, int nd, int randomSeed)
+{
+    boost::mt19937 rng;
+    if (randomSeed)
+        rng.seed(randomSeed);
+    boost::normal_distribution<float> norm;
+
+    boost::variate_generator<boost::mt19937,
+                             boost::normal_distribution<float> >
+        randn(rng, norm);
+
+    boost::multi_array<float, 2> Y(boost::extents[nx][nd]);
+    for (unsigned i = 0;  i < nx;  ++i)
+        for (unsigned j = 0;  j < nd;  ++j)
+            Y[i][j] = 0.0001 * randn();
+
+    return Y;
+}
+
+boost::multi_array<float, 2>
 tsne(const boost::multi_array<float, 2> & probs,
      int num_dims,
      const TSNE_Params & params,
@@ -1016,39 +1038,8 @@ tsne(const boost::multi_array<float, 2> & probs,
 
     int d = num_dims;
 
-    boost::mt19937 rng;
-    boost::normal_distribution<float> norm;
-
-    boost::variate_generator<boost::mt19937,
-                             boost::normal_distribution<float> >
-        randn(rng, norm);
-
-#if 0
-    double min_perp = INFINITY;
-    double max_perp = 0.0;
-    double total_perp = 0.0;
-    double total_log_perp = 0.0;
-
-    for (unsigned i = 0;  i < n;  ++i) {
-        distribution<float> P_row(&probs[i][0], &probs[i][0] + n);
-        double perp = perplexity(P_row);
-        min_perp = std::min(min_perp, perp);
-        max_perp = std::max(max_perp, perp);
-        total_perp += perp;
-        total_log_perp += log(perp);
-    }
-    
-    cerr << "input perplexity: min " << min_perp
-         << " max: " << max_perp << " average: " << total_perp / n
-         << " avg log: " << total_log_perp / n
-         << " total log: " << total_log_perp << endl;
-#endif
-        
-
-    boost::multi_array<float, 2> Y(boost::extents[n][d]);
-    for (unsigned i = 0;  i < n;  ++i)
-        for (unsigned j = 0;  j < d;  ++j)
-            Y[i][j] = 0.0001 * randn();
+    // Coordinates
+    boost::multi_array<float, 2> Y = tsne_init(n, d, params.randomSeed);
 
     // Symmetrize and probabilize P
     boost::multi_array<float, 2> P = probs + transpose(probs);
@@ -1068,16 +1059,24 @@ tsne(const boost::multi_array<float, 2> & probs,
         for (unsigned j = 0;  j < n;  ++j)
             P[i][j] = std::max((i != j) * pfactor * P[i][j], 1e-12f);
 
+    double sump0 = 0.0;
+    for (unsigned i = 0;  i < n;  ++i) {
+        sump0 += P[0][i];
+    }
+
+    cerr << "sump0 = " << sump0 << endl;
+
+    double sump1 = 0.0;
+    for (unsigned i = 0;  i < n;  ++i) {
+        sump1 += P[1][i];
+    }
+
+    cerr << "sump1 = " << sump1 << endl;
+
     Timer timer;
 
     // Pseudo-distance array for reduced space.  Q = D * qfactor
     boost::multi_array<float, 2> D(boost::extents[n][n]);
-
-    // Probabilitiy density array
-    //boost::multi_array<float, 2> Q(boost::extents[n][n]);
-
-    // Stiffness array
-    //boost::multi_array<float, 2> PmQxD(boost::extents[n][n]);
 
     // Y delta
     boost::multi_array<float, 2> dY(boost::extents[n][d]);
@@ -1152,17 +1151,26 @@ tsne(const boost::multi_array<float, 2> & probs,
         if (callback
             && !callback(iter, cost, "gradient")) return Y;
 
-#if 0
+#if 1
         cerr << "C = " << cost << endl;
-        for (unsigned x = 0;  x < n;  ++x) {
+        for (unsigned x = 0;  x < 5;  ++x) {
+
+            cerr << "P[" << x << "][0..5] = "
+                 << P[x][0]
+                 << " " << P[x][1]
+                 << " " << P[x][2]
+                 << " " << P[x][3]
+                 << " " << P[x][4]
+                 << endl;
+
             for (unsigned i = 0;  i < d;  ++i) {
-                if (x < 5) {
                     cerr << "dY[" << x << "][" << i << "]: real " << dY[x][i]
                          << endl;
                     cerr << "Y = " << Y[x][i] << endl;
-                }
             }
         }
+
+        return Y;
 #endif
 
         /*********************************************************************/
@@ -1220,6 +1228,164 @@ double sqr(double d)
     return d * d;
 }
 
+float pythag_dist(const float * d1, const float * d2, int nd)
+{
+    float diff[nd];
+    SIMD::vec_add(d1, -1.0f, d2, diff, nd);
+    return sqrtf(SIMD::vec_dotprod_dp(diff, diff, nd));
+}
+
+std::vector<TsneSparseProbs>
+sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
+                      int numNeighbours,
+                      double perplexity,
+                      double tolerance,
+                      std::unique_ptr<VantagePointTree> * treeOut)
+{
+    int nx = coords.shape()[0];
+    int nd = coords.shape()[1];
+
+    // Distance between neighbours.  Must satisfy the triangle inequality,
+    // so the sqrt is important.
+    auto dist = [&] (int x1, int x2)
+        {
+            return pythag_dist(&coords[x1][0], &coords[x2][0], nd);
+        };
+
+    std::vector<int> examples;
+    for (unsigned i = 0;  i < nx;  ++i)
+        examples.push_back(i);
+
+    std::unique_ptr<VantagePointTree> tree
+        (VantagePointTree::create(examples, dist));
+
+    // For each one, find the numNeighbours nearest neighbours
+    std::vector<TsneSparseProbs> neighbours(nx);
+
+    auto calcExample = [&] (int x)
+        {
+            neighbours[x]
+                = sparseProbsFromCoords(coords, &coords[x][0], *tree, numNeighbours,
+                                        perplexity, tolerance, true /* remove one */);
+        };
+
+    run_in_parallel_blocked(0, nx, calcExample);
+
+    if (treeOut)
+        treeOut->reset(tree.release());
+
+    return neighbours;
+}
+
+TsneSparseProbs
+sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
+                      const float * newExampleCoords,
+                      const VantagePointTree & tree,
+                      int numNeighbours,
+                      double perplexity,
+                      double tolerance,
+                      bool removeOne)
+{
+    int nd = coords.shape()[1];
+
+    // Distance between neighbours.  Must satisfy the triangle inequality,
+    // so the sqrt is important.
+    auto dist = [&] (int x2)
+        {
+            return pythag_dist(&newExampleCoords[0], &coords[x2][0], nd);
+        };
+
+    TsneSparseProbs result;
+
+    // Find the nearest neighbours
+    std::vector<std::pair<float, int> > exNeighbours
+        = tree.search(dist, numNeighbours, INFINITY);
+
+    // Remove the closest one if asked (this is needed when this example itself is
+    // in the tree
+    if (removeOne) {
+        // Check that it really did have zero distance
+        ExcAssertEqual(exNeighbours[0].first, 0.0);
+
+        ExcAssertGreaterEqual(exNeighbours.size(), 1);
+
+        exNeighbours.erase(exNeighbours.begin(), exNeighbours.begin() + 1);
+    }
+
+    // Sort by index number
+    sort_on_second_ascending(exNeighbours);
+
+    // Extract into separate vectors
+    vector<int> indexes(exNeighbours.size());
+    distribution<float> distances(exNeighbours.size());
+
+    for (unsigned i = 0;  i < exNeighbours.size();  ++i)
+        std::tie(distances[i], indexes[i]) = exNeighbours[i];
+        
+    // Now calculate the perplexity
+    std::tie(result.probs, std::ignore)
+        = binary_search_perplexity(distances, perplexity, -1, tolerance);
+
+    // put it back in the node
+    result.indexes = std::move(indexes);
+    
+    return result;
+}
+
+std::vector<TsneSparseProbs>
+symmetrize(const std::vector<TsneSparseProbs> & input)
+{
+    // 1.  Convert to a sparse matrix format, and accumulate
+    std::vector<ML::Lightweight_Hash<int, float> > probs(input.size());
+    
+    for (unsigned j = 0;  j < input.size();  ++j) {
+        const TsneSparseProbs & p = input[j];
+        for (unsigned i = 0;  i < p.indexes.size();  ++i) {
+            // +1 is to avoid inserting 0 into a lightweight hash
+            probs[p.indexes[i]][j + 1] += p.probs[i];
+            probs[j][p.indexes[i] + 1] += p.probs[i];
+        }
+    }
+    
+    // 2.  Convert back to TsneSparseProbs, normalizing as we go
+    std::vector<TsneSparseProbs> result(input.size());
+
+    for (unsigned j = 0;  j < input.size();  ++j) {
+        std::vector<std::pair<int, float> >
+            sorted(probs[j].begin(), probs[j].end());
+        std::sort(sorted.begin(), sorted.end());
+
+        for (auto & s: sorted) {
+            result[j].indexes.push_back(s.first - 1);
+            result[j].probs.push_back(s.second / (2.0 * input.size()));
+        }
+    }
+
+    return result;
+}
+
+boost::multi_array<float, 2>
+tsneApproxFromCoords(const boost::multi_array<float, 2> & coords,
+                     int num_dims,
+                     const TSNE_Params & params,
+                     const TSNE_Callback & callback,
+                     std::unique_ptr<VantagePointTree> * treeOut,
+                     std::unique_ptr<Quadtree> * qtreeOut)
+{
+    std::vector<TsneSparseProbs> neighbours
+        = sparseProbsFromCoords(coords, params.numNeighbours,
+                                params.perplexity, params.tolerance, treeOut);
+
+    std::vector<TsneSparseProbs> symmetricNeighbours
+        = symmetrize(neighbours);
+    
+    boost::multi_array<float, 2> embedding
+        = tsneApproxFromSparse(symmetricNeighbours, num_dims, params, callback, qtreeOut);
+    
+    return embedding;
+}
+
+
 struct CalcRepContext {
     CalcRepContext(const ML::distribution<float> & y,
                    double * FrepZ,
@@ -1228,9 +1394,10 @@ struct CalcRepContext {
                    int nd,
                    bool exact,
                    const std::function<void (const QuadtreeNode & node,
-                                             double qCellZ)> & onNode)
+                                             double qCellZ, const std::vector<int> & poi)> & onNode,
+                   const std::function<const QCoord & (int)> & getPointCoord)
         : y(y), FrepZ(FrepZ), exampleZ(exampleZ), nodesTouched(nodesTouched),
-          nd(nd), exact(exact), onNode(onNode)
+          nd(nd), exact(exact), onNode(onNode), getPointCoord(getPointCoord)
     {
     }
 
@@ -1242,11 +1409,17 @@ struct CalcRepContext {
     int nd;
     bool exact;
     const std::function<void (const QuadtreeNode & node,
-                        double qCellZ)> & onNode;
+                              double qCellZ, const std::vector<int> & poi)> & onNode;
+
+    /// Used to get the coordinate of a point of interest passed in pointsInside
+    const std::function<const QCoord & (int)> & getPointCoord;
+
+    std::vector<int> NO_POINTS;
 
     void calc(const QuadtreeNode & node,
               int depth,
-              bool inside)
+              bool inside,
+              const std::vector<int> & pointsInside)
     {
 
         float com[nd];
@@ -1260,37 +1433,23 @@ struct CalcRepContext {
         if (effectiveNumChildren == 0)
             return;
 
-        float ncr = inside ? node.recipNumChildrenMinusOne : node.recipNumChildren;
+        float ncr = node.recipNumChildren[inside];
 
-        if (inside) {
-            if (nd == 2) {
-                com[0] = ((node.centerOfMass[0] - y[0]) * ncr) - y[0];
-                com[1] = ((node.centerOfMass[1] - y[1]) * ncr) - y[1];
-                distSq = com[0] * com[0] + com[1] * com[1];
-            }
-            else {
-                for (unsigned i = 0;  i < nd;  ++i) {
-                    com[i] = ((node.centerOfMass[i] - y[i]) * ncr) - y[i];
-                    distSq += com[i] * com[i];
-                }
-            }
-        } else {
-            if (nd == 2) {
-                com[0] = (node.centerOfMass[0] * ncr) - y[0];
-                com[1] = (node.centerOfMass[1] * ncr) - y[1];
-                distSq = com[0] * com[0] + com[1] * com[1];
-            }
-            else {
-                for (unsigned i = 0;  i < nd;  ++i) {
-                    com[i] = (node.centerOfMass[i] * ncr) - y[i];
-                    distSq += com[i] * com[i];
-                }
+        if (nd == 2) {
+            com[0] = ((node.centerOfMass[0] - inside*y[0]) * ncr) - y[0];
+            com[1] = ((node.centerOfMass[1] - inside*y[1]) * ncr) - y[1];
+            distSq = com[0] * com[0] + com[1] * com[1];
+        }
+        else {
+            for (unsigned i = 0;  i < nd;  ++i) {
+                com[i] = ((node.centerOfMass[i] - inside*y[i]) * ncr) - y[i];
+                distSq += com[i] * com[i];
             }
         }
 
         if (node.type == QuadtreeNode::TERMINAL
             || effectiveNumChildren == 1
-            || (node.diag < 0.99 * sqrtf(distSq) && !exact)) {
+            || (node.diag < 0.6 * sqrtf(distSq) && !exact)) {
 
             float qCellZ = 1.0f / (1.0f + distSq);
             if (distSq == 0.0) {
@@ -1315,20 +1474,34 @@ struct CalcRepContext {
             }
 
             if (onNode) {
-                onNode(node, qCellZ);
+                onNode(node, qCellZ, pointsInside);
             }
 
             return;
         }
-                    
-        if (inside) {
-            int quad = node.quadrant(y);
-            for (auto & q: node.quadrants) {
-                calc(*q.second, depth + 1, q.first == quad);
+        
+        // If we have points we are bringing along for the ride, then split them
+        // by quadrant.
+        if (!pointsInside.empty()) {
+            std::vector<int> quadrantPoints[1 << nd];
+            for (int p: pointsInside) {
+                int quad = node.quadrant(getPointCoord(p));
+                quadrantPoints[quad].push_back(p);
             }
-        } else {
+
+            int quad = -1;
+            if (inside)
+                quad = node.quadrant(y);
             for (auto & q: node.quadrants) {
-                calc(*q.second, depth + 1, false);
+                calc(*q.second, depth + 1, q.first == quad, quadrantPoints[q.first]);
+            }
+        }
+        else {
+            int quad = -1;
+            if (inside)
+                quad = node.quadrant(y);
+            for (auto & q: node.quadrants) {
+                calc(*q.second, depth + 1, q.first == quad, NO_POINTS);
             }
         }
     }
@@ -1345,143 +1518,32 @@ void calcRep(const QuadtreeNode & node,
              int nd,
              bool exact,
              const std::function<void (const QuadtreeNode & node,
-                                       double qCellZ)> & onNode)
+                                       double qCellZ, const std::vector<int> & poi)> & onNode,
+             const std::vector<int> & pointsOfInterest,
+             const std::function<const QCoord & (int)> & getPointCoord)
 {
-    CalcRepContext context(y, FrepZ, exampleZ, nodesTouched, nd, exact, onNode);
-    context.calc(node, depth, inside);
+    CalcRepContext context(y, FrepZ, exampleZ, nodesTouched, nd, exact, onNode, getPointCoord);
+    context.calc(node, depth, inside, pointsOfInterest);
 }
 
-
-#if 1
 boost::multi_array<float, 2>
-tsneApprox(const boost::multi_array<float, 2> & probs,
-           int num_dims,
-           const TSNE_Params & params,
-           const TSNE_Callback & callback)
+tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
+                     int num_dims,
+                     const TSNE_Params & params,
+                     const TSNE_Callback & callback,
+                     std::unique_ptr<Quadtree> * qtreeOut)
 {
     // See van der Marten, 2013 http://arxiv.org/pdf/1301.3342.pdf
     // Barnes-Hut-SNE
 
-    int nx = probs.shape()[0];
-    if (nx != probs.shape()[1])
-        throw Exception("probabilities were the wrong shape");
-
+    int nx = exampleNeighbours.size();
     int nd = num_dims;
 
-    boost::mt19937 rng;
-    boost::normal_distribution<float> norm;
-
-    boost::variate_generator<boost::mt19937,
-                             boost::normal_distribution<float> >
-        randn(rng, norm);
-
-#if 0
-    double min_perp = INFINITY;
-    double max_perp = 0.0;
-    double total_perp = 0.0;
-    double total_log_perp = 0.0;
-
-    for (unsigned i = 0;  i < n;  ++i) {
-        distribution<float> P_row(&probs[i][0], &probs[i][0] + n);
-        double perp = perplexity(P_row);
-        min_perp = std::min(min_perp, perp);
-        max_perp = std::max(max_perp, perp);
-        total_perp += perp;
-        total_log_perp += log(perp);
-    }
-    
-    cerr << "input perplexity: min " << min_perp
-         << " max: " << max_perp << " average: " << total_perp / n
-         << " avg log: " << total_log_perp / n
-         << " total log: " << total_log_perp << endl;
-#endif
-        
-
-    boost::multi_array<float, 2> Y(boost::extents[nx][nd]);
-    for (unsigned i = 0;  i < nx;  ++i)
-        for (unsigned j = 0;  j < nd;  ++j)
-            Y[i][j] = 0.0001 * randn();
-
-    // Symmetrize and probabilize P
-    boost::multi_array<float, 2> P = probs + transpose(probs);
-
-    // TODO: symmetric so only need to total the upper diagonal
-    double sumP = 0.0;
-    for (unsigned i = 0;  i < nx;  ++i)
-        sumP += 2.0 * SIMD::vec_sum_dp(&P[i][0], i);
-    
-    // Factor that P should be multiplied by in all calculations
-    // We boost it by 4 in early iterations to force the clusters to be
-    // spread apart
-    float pfactor = 4.0 / sumP;
-
-    // TODO: do we need this?   P = Math.maximum(P, 1e-12);
-    for (unsigned i = 0;  i < nx;  ++i)
-        for (unsigned j = 0;  j < nx;  ++j)
-            P[i][j] = std::max((i != j) * pfactor * P[i][j], 1e-12f);
+    boost::multi_array<float, 2> Y = tsne_init(nx, nd, params.randomSeed);
 
     // Do we force calculations to be made exactly?
     bool forceExactSolution = false;
     //forceExactSolution = true;
-
-
-    struct Neighbours {
-        std::vector<int> indexes;
-        ML::distribution<float> probs;
-    };
-
-    std::vector<Neighbours> exampleNeighbours(nx);
-
-    double keepProb = 0.99;  // How much probability to keep in neighbours?
-    int minNeighbours = 20;
-    int maxNeighbours = 60;
-
-    // Create a list of nearest neighbours and a probability distribution
-    // for each point
-    for (unsigned j = 0;  j < nx;  ++j) {
-        std::vector<std::pair<float, int> > probs;
-        for (unsigned i = 0;  i < nx;  ++i) {
-            if (i == j)
-                continue;
-            probs.emplace_back(P[j][i], i);
-        }
-        
-        std::sort(probs.rbegin(), probs.rend());
-
-        double probSoFar = 0.0;
-        int numToKeep = -1;
-        for (unsigned i = 0;  i < probs.size();  ++i) {
-            probSoFar += probs[i].first;
-            if (probSoFar > keepProb) {
-                numToKeep = i;
-                break;
-            }
-        }
-
-        if (numToKeep < minNeighbours)
-            numToKeep = std::min<int>(minNeighbours, probs.size());
-        if (numToKeep > maxNeighbours)
-            numToKeep = maxNeighbours;
-
-        if (forceExactSolution)
-            numToKeep = probs.size();
-
-        // Resort to be in order of increasing index
-        probs.resize(numToKeep);
-        std::sort(probs.begin(), probs.end(),
-                  [] (pair<float, int> p1, pair<float, int> p2)
-                  { return p1.second < p2.second; });
-
-        Neighbours neighbours;
-        for (unsigned i = 0;  i < numToKeep;  ++i) {
-            neighbours.indexes.push_back(probs[i].second);
-            neighbours.probs.push_back(probs[i].first);
-        }
-
-        //neighbours.probs.normalize();
-
-        exampleNeighbours[j] = std::move(neighbours);
-    }
 
     // Z * Frep
     boost::multi_array<double, 2> FrepZ(boost::extents[nx][nd]);
@@ -1496,10 +1558,6 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
     boost::multi_array<float, 2> gains(boost::extents[nx][nd]);
     std::fill(gains.data(), gains.data() + gains.num_elements(), 1.0f);
 
-    // When we want to calculate the cost, we store log( Z q[i][j] ) in this
-    // matrix, to be used later on for the cost computation
-    boost::multi_array<double, 2> logqZ(boost::extents[nx][nx]);
-
     boost::multi_array<double, 2> FattrApprox(boost::extents[nx][nd]);
     boost::multi_array<double, 2> FrepApprox(boost::extents[nx][nd]);
 
@@ -1512,6 +1570,19 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
         && !callback(-1, cost, "init")) return Y;
 
     Timer timer;
+
+    // As described in Hinton et al, start off with a total probability of 4, before moving
+    // back to 1 after 100 iterations.
+    float pFactor = 4.0;
+
+    //cerr << "exampleNeighbours[0].indexes = " << exampleNeighbours[0].indexes << endl;
+    //cerr << "exampleNeighbours[0].probs = " << exampleNeighbours[0].probs << endl;
+    //cerr << "exampleNeighbours[0].probs.total() = " << exampleNeighbours[0].probs.total() << endl;
+    //cerr << "exampleNeighbours[0].probs.min() = " << exampleNeighbours[0].probs.min() << endl;
+    //cerr << "exampleNeighbours[0].probs.max() = " << exampleNeighbours[0].probs.max() << endl;
+
+    //cerr << "sump0 = " << exampleNeighbours[0].probs.total() * pFactor << endl;
+    //cerr << "sump1 = " << exampleNeighbours[1].probs.total() * pFactor << endl;
     
     for (int iter = 0;  iter < params.max_iter;  ++iter) {
 
@@ -1552,11 +1623,9 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
             qtree.insert(coord);
         }
         
-        int numNodes = qtree.root->finish();
+        int numNodes JML_UNUSED = qtree.root->finish();
 
         //cerr << "points are in " << numNodes << " nodes" << endl;
-
-        std::vector<ML::compact_vector<int, 3> > nodeContains(numNodes);
 
         // Create a new coordinate for each neighbour
         std::vector<QCoord> pointCoords(nx);
@@ -1565,45 +1634,13 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
             pointCoords[i] = QCoord(&Y[i][0], &Y[i][0] + nd);
         }
 
-        // Now traverse the quadtree, splitting up the list of points so that we
-        // have a list of them at each node
-        std::function<void (QuadtreeNode & node, const std::vector<int> &) > distributePoints
-            = [&] (QuadtreeNode & node,
-                   const std::vector<int> & points)
-            {
-                nodeContains[node.nodeNumber].insert
-                (nodeContains[node.nodeNumber].begin(),
-                 points.begin(), points.end());
-            
-                if (node.type == QuadtreeNode::TERMINAL) {
-                    ExcAssertEqual(pointCoords[points[0]],
-                                   node.child);
-                }
-                else {
-                    std::map<int, std::vector<int> > quadrants;
-
-                    for (auto & n: points) {
-                        quadrants[node.quadrant(node.center, pointCoords[n])].push_back(n);
-                    }
-
-                    for (auto & q: quadrants) {
-                        auto it = node.quadrants.find(q.first);
-                        ExcAssert(it != node.quadrants.end());
-                        distributePoints(*it->second, q.second);
-                    }
-                }
-            };
-
-        // Distribute all points across the quadtree
-        vector<int> iota;
-        for (unsigned i = 0;  i < nx;  ++i)
-            iota.push_back(i);
-
-        distributePoints(*qtree.root, iota);
-
+        // This accumulates the sum_j p[x][j] log Z*q[x][j] for each example.  From this and
+        // Z, we can calculate the cost of each example.  Only relevant if calcC is true.
+        double exampleCFactor[nx];
+        std::fill(exampleCFactor, exampleCFactor  +nx, 0.0);
 
         // Do we calculate the cost?
-        bool calcC = /* iter < 10 ||*/ (iter + 1) % 100 == 0 || iter == params.max_iter - 1;
+        bool calcC = iter < 10 || (iter + 1) % 100 == 0 || iter == params.max_iter - 1;
 
         // Approximation for Z, accumulated here
         ML::Spinlock Zmutex;
@@ -1620,8 +1657,8 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                     FrepApprox[x][i] = 0.0;
                 }
 
-                const Neighbours & neighbours = exampleNeighbours[x];
-
+                const TsneSparseProbs & neighbours = exampleNeighbours[x];
+                
                 distribution<float> y(nd);
                 for (unsigned i = 0;  i < nd;  ++i)
                     y[i] = Y[x][i];
@@ -1629,7 +1666,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                 // For each neighbour, calculate the attractive force.  The
                 // others are defined as zero.
                 for (unsigned q = 0;  q < neighbours.indexes.size();  ++q) {
-
+                    
                     unsigned j = neighbours.indexes[q];
                     ExcAssertNotEqual(j, x);
 
@@ -1653,8 +1690,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                     // See van der Marten, 2013 http://arxiv.org/pdf/1301.3342.pdf
                     // Barnes-Hut-SNE
 
-                    //float factorAttr = neighbours.probs[q] / (1.0f + D);
-                    double factorAttr = P[x][j] / (1.0 + D);
+                    double factorAttr = pFactor * neighbours.probs[q] / (1.0 + D);
 
                     if (nd == 2) {
                         float dYj0 = y[0] - Y[j][0];
@@ -1681,31 +1717,50 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
                 bool exact = forceExactSolution;
 
+                int poiDone = 0;
+
                 auto onNode = [&] (const QuadtreeNode & node,
-                                   double qCellZ)
+                                   double qCellZ,
+                                   const std::vector<int> & pointsOfInterest)
                 {
                     // If we want to calculate C, we store the log of
                     // the cell's Q * Z for each point of interest so that
                     // we can calculate the cost later.
-                    if (calcC) {
-                        auto & contained = nodeContains[node.nodeNumber];
-                        if (!contained.empty()) {
-                            double logqCellZ = logf(qCellZ);
-                            for (int node: contained) {
-                                logqZ[x][node] = logqCellZ;
-                            }
-                        }
+
+                    // Note that sum_j p[j] log (Zq[j])
+                    //         = sum_j p[j] log Z + sum_j p[j] log q[j]
+
+                    double logqCellZ = log(qCellZ);
+                    for (unsigned p: pointsOfInterest) {
+                        exampleCFactor[x] += pFactor * neighbours.probs[p] * logqCellZ;
                     }
+
+                    poiDone += pointsOfInterest.size();
+                };
+
+                auto getPointCoord = [&] (int point) -> const QCoord &
+                {
+                    return pointCoords.at(neighbours.indexes.at(point));
                 };
 
                 if (calcC) {
+                    // Bring along the points of interest for the ride
+                    vector<int> pointsOfInterest;
+                    pointsOfInterest.reserve(neighbours.indexes.size());
+                    for (unsigned i = 0;  i < neighbours.indexes.size();  ++i)
+                        pointsOfInterest.push_back(i);
+
                     calcRep(*qtree.root, 0, true /* inside */,
                             y, &FrepZ[x][0], exampleZ, nodesTouched, nd, exact,
-                            onNode);
+                            onNode, pointsOfInterest, getPointCoord);
+                    ExcAssertEqual(poiDone, neighbours.indexes.size());
+                    //if (!isfinite(exampleCFactor[x]))
+                    //    cerr << "x = " << x << " factor " << exampleCFactor[x] << endl;
+                    ExcAssert(isfinite(exampleCFactor[x]));
                 } else {
                     calcRep(*qtree.root, 0, true /* inside */,
                             y, &FrepZ[x][0], exampleZ, nodesTouched, nd, exact,
-                            nullptr);
+                            nullptr, {}, nullptr);
                 }
 
                 {
@@ -1718,7 +1773,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                 //         << endl;
             };
 
-#if 0
+#if 1
         int totalThreads = 4;
 
         auto doThread = [&] (int n)
@@ -1764,16 +1819,23 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
         double Capprox = 0.0;
         if (calcC) {
-            double logZ = log(ZApprox);
+            //double logZ = log(ZApprox);
+
+            // For a given example x,
+            // C[x] = sum_j P[x][j] log P[x][j] - sum_j P[x][j] log q[x][j]
+            //      = sum_j P[x][j] log P[x][j] - sum_j P[x][j] log Zq[j][j] + sum_j P[x][j] log Z
+            //      = sum_j P[x][j] log Z P[x][j] - exampleCFactor[x]
             for (unsigned x = 0;  x < nx;  ++x) {
-                for (unsigned j = 0;  j < nx;  ++j) {
-                    if (x == j)
-                        continue;
-                    // log (Z * qj) = logZ + log qj, so log qj = log (Z * qj) - log Z
-                    
-                    double logqj = logqZ[x][j] - logZ;
-                    Capprox += P[x][j] * (logf(P[x][j]) - logqj);
+
+                const TsneSparseProbs & neighbours = exampleNeighbours[x];
+
+                double Cexample = -exampleCFactor[x];
+
+                for (auto & p: neighbours.probs) {
+                    Cexample += pFactor * p * logf(pFactor * p * ZApprox);
                 }
+
+                Capprox += Cexample;
             }
         }
 
@@ -1803,7 +1865,6 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
             }
 
-
             for (unsigned j = 0;  j < nx;  ++j) {
                 if (j == x)
                     continue;
@@ -1822,11 +1883,18 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
                 QZ[x][j] = 1.0 / (1.0 + D);
                 Z += QZ[x][j];
+            }
 
-                // Attractive force
-                // Note that 1/(1 + D[j]) == Q[x][j] * Z
+            const TsneSparseProbs & neighbours = exampleNeighbours[x];
+            
+            // For each neighbour, calculate the attractive force.  The
+            // others are defined as zero.
+            for (unsigned q = 0;  q < neighbours.indexes.size();  ++q) {
+                    
+                unsigned j = neighbours.indexes[q];
+                ExcAssertNotEqual(j, x);
 
-                double factorAttr = P[x][j] * QZ[x][j];
+                double factorAttr = pFactor * neighbours.probs[q] * QZ[x][j];
 
                 if (nd == 2) {
                     double dYj0 = y[0] - Y[j][0];
@@ -1844,7 +1912,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
             }
         }
 
-        cerr << "ZApprox = " << ZApprox << " Z = " << Z << endl;
+        //cerr << "ZApprox = " << ZApprox << " Z = " << Z << endl;
 
 
         for (unsigned x = 0;  x < nx;  ++x) {
@@ -1878,7 +1946,20 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                     }
                 }
 
-                C += P[x][j] * logf(P[x][j] / Qxj);
+            }
+
+            const TsneSparseProbs & neighbours = exampleNeighbours[x];
+            
+            // For each neighbour, calculate the attractive force.  The
+            // others are defined as zero.
+            for (unsigned q = 0;  q < neighbours.indexes.size();  ++q) {
+                    
+                unsigned j = neighbours.indexes[q];
+                ExcAssertNotEqual(j, x);
+
+                double Qxj = QZ[x][j] / Z;
+
+                C += pFactor * neighbours.probs[q] * logf(pFactor * neighbours.probs[q] / Qxj);
             }
         }
 
@@ -1894,6 +1975,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                 //dY[x][i] = 4.0 * (FattrApprox[x][i] + Frep[x][i]);
                 //dY[x][i] = 4.0 * (Fattr[x][i] + FrepApprox[x][i]);
                 dY[x][i] = 4.0 * (FattrApprox[x][i] + FrepApprox[x][i]);
+
                 maxAbsDy = std::max(maxAbsDy, fabs(dY[x][i]));
                 maxAbsY = std::max(maxAbsY, Y[x][i]);
 
@@ -1919,7 +2001,35 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
         }
 
-        //return Y;
+#if 0
+        cerr << "C = " << Capprox << endl;
+
+        for (unsigned x = 0;  x < 5;  ++x) {
+            cerr << "P[" << x << "][0..5] = "
+                 << pFactor * exampleNeighbours[x].probs[0]
+                 << " " << pFactor * exampleNeighbours[x].probs[1]
+                 << " " << pFactor * exampleNeighbours[x].probs[2]
+                 << " " << pFactor * exampleNeighbours[x].probs[3]
+                 << " " << pFactor * exampleNeighbours[x].probs[4]
+                 << endl;
+
+            cerr << "P[" << x << "][0..5] = "
+                 << exampleNeighbours[x].indexes[0]
+                 << " " << exampleNeighbours[x].indexes[1]
+                 << " " << exampleNeighbours[x].indexes[2]
+                 << " " << exampleNeighbours[x].indexes[3]
+                 << " " << exampleNeighbours[x].indexes[4]
+                 << endl;
+
+                for (unsigned i = 0;  i < nd;  ++i) {
+                    cerr << "dY[" << x << "][" << i << "]: real " << dY[x][i]
+                         << endl;
+                    cerr << "Y = " << Y[x][i] << endl;
+                }
+        }
+
+        return Y;
+#endif
 
         double cost2 = Capprox;
         if (calcC) {
@@ -1984,8 +2094,6 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
         lastNormalizedY = normalizedY;
 
-        //cerr << "maxCoordChange = " << maxCoordChange << endl;
-
         //cerr << "maxAbsDy = " << maxAbsDy << " maxAbsY = " << maxAbsY
         //     << " ratio " << 100.0 * maxAbsDy / maxAbsY
         //     << " maxCoordChange = " << maxCoordChange << endl;
@@ -1993,20 +2101,14 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
         if (maxCoordChange < 0.001 && iter > 200)
             return Y;
             
-        
-
-        // Stop lying about P values if we're finished
+        // Stop lying about P values if we're finished 100 iterations
         if (iter == 100) {
-            for (unsigned i = 0;  i < nx;  ++i)
-                for (unsigned j = 0;  j < nx;  ++j)
-                    P[i][j] *= 0.25f;
+            pFactor /= 4.0;
         }
     }
 
     return Y;
 }
-
-#endif
 
 ML::distribution<float>
 retsne(const ML::distribution<float> & probs_,

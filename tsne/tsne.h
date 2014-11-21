@@ -21,6 +21,9 @@
 
 namespace ML {
 
+struct VantagePointTree;
+struct Quadtree;
+
 std::pair<double, distribution<float> >
 perplexity_and_prob(const distribution<float> & D, double beta = 1.0,
                     int i = -1);
@@ -111,7 +114,11 @@ pca(boost::multi_array<float, 2> & coords, int num_dims = 50);
 struct TSNE_Params {
     
     TSNE_Params()
-        : max_iter(1000),
+        : numNeighbours(100),
+          perplexity(20),
+          tolerance(1e-5),
+          randomSeed(0),
+          max_iter(1000),
           initial_momentum(0.5),
           final_momentum(0.8),
           eta(500),
@@ -119,6 +126,12 @@ struct TSNE_Params {
           min_prob(1e-12)
     {
     }
+
+    int numNeighbours;
+    double perplexity;
+    double tolerance;
+
+    int randomSeed;
 
     int max_iter;
     double initial_momentum;
@@ -146,14 +159,20 @@ tsne(const boost::multi_array<float, 2> & probs,
      const TSNE_Callback & callback = TSNE_Callback());
 
 
+struct TsneSparseProbs {
+    std::vector<int> indexes;
+    ML::distribution<float> probs;
+};
+
 /** Sparse and approximate Barnes-Hut-SNE version of tSNE.
     Input is a sparse distribution of probabilities per example.
  */
 boost::multi_array<float, 2>
-tsneApproxFromSparse(const std::vector<std::pair<float, int> > & neighbours,
-           int num_dims,
-           const TSNE_Params & params = TSNE_Params(),
-           const TSNE_Callback & callback = TSNE_Callback());
+tsneApproxFromSparse(const std::vector<TsneSparseProbs> & neighbours,
+                     int num_dims,
+                     const TSNE_Params & params = TSNE_Params(),
+                     const TSNE_Callback & callback = TSNE_Callback(),
+                     std::unique_ptr<Quadtree> * qtreeOut = nullptr);
 
 boost::multi_array<float, 2>
 tsneApproxFromDense(const boost::multi_array<float, 2> & probs,
@@ -165,7 +184,9 @@ boost::multi_array<float, 2>
 tsneApproxFromCoords(const boost::multi_array<float, 2> & coords,
                      int num_dims,
                      const TSNE_Params & params = TSNE_Params(),
-                     const TSNE_Callback & callback = TSNE_Callback());
+                     const TSNE_Callback & callback = TSNE_Callback(),
+                     std::unique_ptr<VantagePointTree> * treeOut = nullptr,
+                     std::unique_ptr<Quadtree> * qtreeOut = nullptr);
 
 /** Given a set of coordinates for each of nx elements, a number of nearest
     neighbours and a perplexity score, calculate a sparse set of neighbour
@@ -184,17 +205,49 @@ tsneApproxFromCoords(const boost::multi_array<float, 2> & coords,
       examples.  This would typically be set at 3 * the perplexity to make
       sure that there are sufficiently distant examples for the chosen
       perplexity.
+    - tolerance: tolerance for the perplexity calculation
 
     Output:
     - A vector of nx entries, each of which contains numNeighbours pairs
       of (probability, exampleNum) where the probability distribution for
-      a given example has the given perplexity.
+      a given example has the given perplexity.  The probabilities for
+      each example will sum to one.
+    - If treeOut is not null, then the unique_ptr it points to will be
+      initialized with the vantage tree used to perform the calculations.
 */
 
-std::vector<std::pair<float, int> >
+std::vector<TsneSparseProbs>
 sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
                       int numNeighbours,
-                      double perplexity);
+                      double perplexity,
+                      double tolerance = 1e-5,
+                      std::unique_ptr<VantagePointTree> * treeOut = nullptr);
+
+/** Calculate a new set of sparse probabilities for an example, re-applying
+    what was learned from a previous sparseProbsFromCoords implementation.
+
+    Input:
+    - coords, numNeighbours, perplexity, tolerance: as above
+    - newExampleCoords: the coordinates of the new example to calculate
+      probabilities for
+    - tree: the vantage point tree output from sparseProbsFromCoords()
+    - removeOne: if this is true, then this example is in the tree and
+      needs to be removed (there will be a zero distance entry in each
+      which must be got rid of).  If it is a new example that wasn't in
+      those presented to sparseProbsFromCoords(), then it should be
+      false.
+
+    Output:
+    - as in sparseProbsFromCoords()
+*/
+TsneSparseProbs
+sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
+                      const float * newExampleCoords,
+                      const VantagePointTree & tree,
+                      int numNeighbours,
+                      double perplexity,
+                      double tolerance = 1e-5,
+                      bool removeOne = false);
 
 /** Re-run t-SNE over the given high dimensional probability vector for a
     single example, figuring out where that example should be embedded in
