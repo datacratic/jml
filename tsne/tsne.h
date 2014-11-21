@@ -146,13 +146,55 @@ tsne(const boost::multi_array<float, 2> & probs,
      const TSNE_Callback & callback = TSNE_Callback());
 
 
-/** Approximate Barnes-Hut-SNE version of tSNE. */
+/** Sparse and approximate Barnes-Hut-SNE version of tSNE.
+    Input is a sparse distribution of probabilities per example.
+ */
 boost::multi_array<float, 2>
-tsneApprox(const boost::multi_array<float, 2> & probs,
+tsneApproxFromSparse(const std::vector<std::pair<float, int> > & neighbours,
            int num_dims,
            const TSNE_Params & params = TSNE_Params(),
            const TSNE_Callback & callback = TSNE_Callback());
 
+boost::multi_array<float, 2>
+tsneApproxFromDense(const boost::multi_array<float, 2> & probs,
+                    int num_dims,
+                    const TSNE_Params & params = TSNE_Params(),
+                    const TSNE_Callback & callback = TSNE_Callback());
+
+boost::multi_array<float, 2>
+tsneApproxFromCoords(const boost::multi_array<float, 2> & coords,
+                     int num_dims,
+                     const TSNE_Params & params = TSNE_Params(),
+                     const TSNE_Callback & callback = TSNE_Callback());
+
+/** Given a set of coordinates for each of nx elements, a number of nearest
+    neighbours and a perplexity score, calculate a sparse set of neighbour
+    probabilities with the given perplexity for each of the elements.
+
+    The pythagorean distance is used as a metric to choose which are the
+    closest examples.
+
+    Input:
+    - coords: nx by nd matrix, with the nd coordinates for each of the nd
+      example.  These will be interpreted as coordinates in a nd dimensional
+      space, ie not as contingent probabilities but as coordinates.
+    - perplexity: value of perplexity to calculate.  The output
+      distribution for each of the nx examples will have this perplexity.
+    - numNeighbours: number of neighbours to return for each of the
+      examples.  This would typically be set at 3 * the perplexity to make
+      sure that there are sufficiently distant examples for the chosen
+      perplexity.
+
+    Output:
+    - A vector of nx entries, each of which contains numNeighbours pairs
+      of (probability, exampleNum) where the probability distribution for
+      a given example has the given perplexity.
+*/
+
+std::vector<std::pair<float, int> >
+sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
+                      int numNeighbours,
+                      double perplexity);
 
 /** Re-run t-SNE over the given high dimensional probability vector for a
     single example, figuring out where that example should be embedded in

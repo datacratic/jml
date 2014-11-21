@@ -22,6 +22,9 @@
 #include "jml/utils/parse_context.h"
 #include "jml/utils/filter_streams.h"
 #include "jml/utils/environment.h"
+#include "jml/tsne/vantage_point_tree.h"
+#include "jml/arch/simd_vector.h"
+#include "jml/utils/pair_utils.h"
 
 using namespace ML;
 using namespace std;
@@ -34,7 +37,7 @@ X sqr(X x)
     return x * x;
 }
 
-#if 1
+#if 0
 
 BOOST_AUTO_TEST_CASE( test_vectors_to_distances )
 {
@@ -268,6 +271,100 @@ BOOST_AUTO_TEST_CASE( test_small )
 }
 #endif
 
+BOOST_AUTO_TEST_CASE( test_vantage_point_tree )
+{
+    string input_file = Environment::instance()["JML_TOP"]
+        + "/tsne/testing/mnist2500_X_min.txt.gz";
+
+    filter_istream stream(input_file);
+    Parse_Context context(input_file, stream);
+
+    int nd = 784;
+    int nx = 2500;
+
+    boost::multi_array<float, 2> data(boost::extents[nx][nd]);
+
+    cerr << "loading " << nx << " examples...";
+    for (unsigned i = 0;  i < nx;  ++i) {
+        for (unsigned j = 0;  j < nd;  ++j) {
+            float f = context.expect_float();
+            data[i][j] = f;
+            context.expect_whitespace();
+        }
+
+        context.expect_eol();
+    }
+    cerr << "done." << endl;
+
+    int numCalls = 0;
+
+    // Distance between neighbours.  Must satisfy the triangle inequality,
+    // so the sqrt is important.
+    auto dist = [&] (int x1, int x2)
+        {
+            numCalls += 1;
+            float diff[nd];
+            SIMD::vec_add(&data[x1][0], -1.0f, &data[x2][0], diff, nd);
+            return sqrtf(SIMD::vec_dotprod_dp(diff, diff, nd));
+        };
+
+    BOOST_CHECK_EQUAL(dist(0, 0), 0.0);
+
+    std::vector<int> examples;
+    for (unsigned i = 0;  i < nx;  ++i)
+        examples.push_back(i);
+
+    Timer timer;
+
+    std::unique_ptr<VantagePointTree> tree
+        (VantagePointTree::create(examples, dist));
+
+    cerr << timer.elapsed();
+    timer.restart();
+
+    cerr << "Vantage tree created with " << numCalls << " calls instead of "
+         << (numCalls - 1) * (numCalls) / 2 << " calls" << endl;
+
+    // For each one, find the 100 nearest neighbours
+
+    std::vector<std::vector<int> > neighbours;
+
+    for (unsigned x = 0;  x < nd;  ++x) {
+        std::vector<std::pair<float, int> > exNeighbours
+            = tree->search([&] (int x2) { return dist(x, x2); },
+                           100, INFINITY);
+
+        BOOST_CHECK_EQUAL(exNeighbours.size(), 100);
+        BOOST_CHECK_EQUAL(exNeighbours[0].first, 0.0);
+        BOOST_CHECK_EQUAL(exNeighbours[0].second, x);
+
+        if (x < 10) {
+            std::vector<std::pair<float, int> > realDistances;
+            for (unsigned j = 0;  j < nx;  ++j) {
+                realDistances.emplace_back(dist(x, j), j);
+            }
+
+            std::sort(realDistances.begin(), realDistances.end());
+            realDistances.resize(100);
+
+
+            for (unsigned i = 0;  i < 100;  ++i) {
+                BOOST_CHECK_EQUAL(exNeighbours[i].first, realDistances[i].first);
+
+                // Order can reasonably be different, as vantage point tree doesn't
+                // try to keep the lowest indexed that have the same distance.
+                //BOOST_CHECK_EQUAL(exNeighbours[i].second, realDistances[i].second);
+            }
+        }
+    }
+
+    cerr << "did neighbour search in " << timer.elapsed() << endl;
+    cerr << "numCalls = " << numCalls << endl;
+
+    cerr << timer.elapsed();
+}
+
+#if 0
 BOOST_AUTO_TEST_CASE( test_small_approx )
 {
     string input_file = Environment::instance()["JML_TOP"]
@@ -335,7 +432,7 @@ BOOST_AUTO_TEST_CASE( test_small_approx )
 
     cerr << "res = " << res << endl;
 }
-
+#endif
 #if 1
 BOOST_AUTO_TEST_CASE( test_distance_to_probability_big )
 {

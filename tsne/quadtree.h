@@ -12,7 +12,7 @@
 
 namespace ML {
 
-typedef ML::compact_vector<float, 3> QCoord;
+typedef ML::compact_vector<float, 3, uint32_t, false> QCoord;
 
 struct QuadtreeNode {
 
@@ -28,6 +28,8 @@ struct QuadtreeNode {
         }
 
         ExcAssert(contains(child));
+
+        diag = diagonalLength();
     }
 
     /** Construct empty. */
@@ -40,12 +42,15 @@ struct QuadtreeNode {
         for (unsigned i = 0;  i < mins.size();  ++i) {
             center[i] = 0.5 * (mins[i] + maxs[i]);
         }
+
+        diag = diagonalLength();
     }
 
     QCoord mins;   ///< Minimum coordinates for bounding box
     QCoord maxs;   ///< Maximum coordinates for bounding box
     QCoord center; ///< Cached pre-computation of center of bounding box
-
+    float  diag;   ///< Diagonal distance across box
+    
     enum Type {
         EMPTY = 0,     ///< Nothing in it
         NODE = 1,      ///< It's a node with child segments
@@ -55,12 +60,16 @@ struct QuadtreeNode {
     int numChildren;   ///< Number of children in this part of tree
     QCoord child;         ///< Child node itself
     QCoord centerOfMass;  ///< Center of mass of children, or child if terminal
+    float recipNumChildren;
+    float recipNumChildrenMinusOne;
 
     int parentNodeNumber;  ///< Node number of the parent node
     int nodeNumber;        ///< Number of this node; calculated by finish()
 
     /** The different quadrants for when we're a NODE. */
     std::map<int, std::unique_ptr<QuadtreeNode> > quadrants;
+
+    //std::compact_vector<std::unique_ptr<QuadTreeNode>, 4> quadrants;
 
     /** Insert the given point into the tree. */
     void insert(QCoord point, int depth = 0, int n = 1)
@@ -162,7 +171,9 @@ struct QuadtreeNode {
         this->parentNodeNumber = parentNodeNumber;
         nodeNumber = currentNodeNumber;
         ++currentNodeNumber;
-        
+        recipNumChildren = 1.0 / numChildren;
+        recipNumChildrenMinusOne = 1.0 / (numChildren - 1);
+
         for (auto & q: quadrants) {
             currentNodeNumber
                 = q.second->finish(currentNodeNumber, this->nodeNumber);
@@ -209,8 +220,15 @@ struct QuadtreeNode {
         insert(oldChild, depth, n);
     }
 
+    template<typename Coord>
+    int quadrant(const Coord & point) const
+    {
+        return quadrant(center, point);
+    }
+
     // Return which quadrant the given point is in
-    static int quadrant(const QCoord & center, const QCoord & point)
+    template<typename Coord>
+    static int quadrant(const QCoord & center, const Coord & point)
     {
         ExcAssertEqual(center.size(), point.size());
         int result = 0;

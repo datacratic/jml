@@ -1220,6 +1220,138 @@ double sqr(double d)
     return d * d;
 }
 
+struct CalcRepContext {
+    CalcRepContext(const ML::distribution<float> & y,
+                   double * FrepZ,
+                   double & exampleZ,
+                   int & nodesTouched,
+                   int nd,
+                   bool exact,
+                   const std::function<void (const QuadtreeNode & node,
+                                             double qCellZ)> & onNode)
+        : y(y), FrepZ(FrepZ), exampleZ(exampleZ), nodesTouched(nodesTouched),
+          nd(nd), exact(exact), onNode(onNode)
+    {
+    }
+
+
+    const ML::distribution<float> & y;
+    double * FrepZ;
+    double & exampleZ;
+    int & nodesTouched;
+    int nd;
+    bool exact;
+    const std::function<void (const QuadtreeNode & node,
+                        double qCellZ)> & onNode;
+
+    void calc(const QuadtreeNode & node,
+              int depth,
+              bool inside)
+    {
+
+        float com[nd];
+
+        ++nodesTouched;
+
+        float distSq = 0.0f;
+
+        int effectiveNumChildren = node.numChildren - inside;
+
+        if (effectiveNumChildren == 0)
+            return;
+
+        float ncr = inside ? node.recipNumChildrenMinusOne : node.recipNumChildren;
+
+        if (inside) {
+            if (nd == 2) {
+                com[0] = ((node.centerOfMass[0] - y[0]) * ncr) - y[0];
+                com[1] = ((node.centerOfMass[1] - y[1]) * ncr) - y[1];
+                distSq = com[0] * com[0] + com[1] * com[1];
+            }
+            else {
+                for (unsigned i = 0;  i < nd;  ++i) {
+                    com[i] = ((node.centerOfMass[i] - y[i]) * ncr) - y[i];
+                    distSq += com[i] * com[i];
+                }
+            }
+        } else {
+            if (nd == 2) {
+                com[0] = (node.centerOfMass[0] * ncr) - y[0];
+                com[1] = (node.centerOfMass[1] * ncr) - y[1];
+                distSq = com[0] * com[0] + com[1] * com[1];
+            }
+            else {
+                for (unsigned i = 0;  i < nd;  ++i) {
+                    com[i] = (node.centerOfMass[i] * ncr) - y[i];
+                    distSq += com[i] * com[i];
+                }
+            }
+        }
+
+        if (node.type == QuadtreeNode::TERMINAL
+            || effectiveNumChildren == 1
+            || (node.diag < 0.99 * sqrtf(distSq) && !exact)) {
+
+            float qCellZ = 1.0f / (1.0f + distSq);
+            if (distSq == 0.0) {
+                cerr << "DISTANCE OF ZERO" << endl;
+                cerr << "effectiveNumChildren = "
+                     << effectiveNumChildren << endl;
+                cerr << "node.numChildren = " << node.numChildren
+                     << endl;
+                cerr << "inside = " << inside << endl;
+                cerr << "node.mins = " << node.mins << endl;
+                cerr << "node.maxs = " << node.maxs << endl;
+                cerr << "node.center = " << node.center << endl;
+                cerr << "node.child = " << node.child << endl;
+                cerr << "point = " << y << endl;
+            }
+
+
+            exampleZ += effectiveNumChildren * qCellZ;
+
+            for (unsigned i = 0;  i < nd;  ++i) {
+                FrepZ[i] += effectiveNumChildren * com[i] * qCellZ * qCellZ;
+            }
+
+            if (onNode) {
+                onNode(node, qCellZ);
+            }
+
+            return;
+        }
+                    
+        if (inside) {
+            int quad = node.quadrant(y);
+            for (auto & q: node.quadrants) {
+                calc(*q.second, depth + 1, q.first == quad);
+            }
+        } else {
+            for (auto & q: node.quadrants) {
+                calc(*q.second, depth + 1, false);
+            }
+        }
+    }
+};
+
+// Used to traverse the quadtree for the Ys
+void calcRep(const QuadtreeNode & node,
+             int depth,
+             bool inside,
+             const ML::distribution<float> & y,
+             double * FrepZ,
+             double & exampleZ,
+             int & nodesTouched,
+             int nd,
+             bool exact,
+             const std::function<void (const QuadtreeNode & node,
+                                       double qCellZ)> & onNode)
+{
+    CalcRepContext context(y, FrepZ, exampleZ, nodesTouched, nd, exact, onNode);
+    context.calc(node, depth, inside);
+}
+
+
 #if 1
 boost::multi_array<float, 2>
 tsneApprox(const boost::multi_array<float, 2> & probs,
@@ -1371,6 +1503,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
     boost::multi_array<double, 2> FattrApprox(boost::extents[nx][nd]);
     boost::multi_array<double, 2> FrepApprox(boost::extents[nx][nd]);
 
+    boost::multi_array<float, 2> lastNormalizedY(boost::extents[nx][nd]);
 
     double cost = INFINITY;
     double last_cost = INFINITY;
@@ -1470,7 +1603,7 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
 
         // Do we calculate the cost?
-        bool calcC = iter < 10 || (iter + 1) % 10 == 0 || iter == params.max_iter - 1;
+        bool calcC = /* iter < 10 ||*/ (iter + 1) % 100 == 0 || iter == params.max_iter - 1;
 
         // Approximation for Z, accumulated here
         ML::Spinlock Zmutex;
@@ -1548,241 +1681,32 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
 
                 bool exact = forceExactSolution;
 
-                bool donePrint = false;
-
-                // Used to traverse the quadtree for the Ys
-                std::function<bool (const QuadtreeNode &, int)>
-                //auto
-                onNode = [&] (const QuadtreeNode & node, int depth)
+                auto onNode = [&] (const QuadtreeNode & node,
+                                   double qCellZ)
                 {
-                    ++nodesTouched;
-
-                    double dist;
-
-                    bool containsY = node.contains(y);
-                    int effectiveNumChildren = node.numChildren - containsY;
-
-                    if (effectiveNumChildren == 0)
-                        return false;
-
-                    if (containsY) {
-                        if (nd == 2) {
-                            double ncr = 1.0 / effectiveNumChildren;
-                            com[0] = ((node.centerOfMass[0] - y[0]) * ncr) - y[0];
-                            com[1] = ((node.centerOfMass[1] - y[1]) * ncr) - y[1];
-                            dist = sqrt(com[0] * com[0] + com[1] * com[1]);
-                        }
-                        else {
-
-                            // 1.  Calculate the distance between this y point and the
-                            //     node center
-                            std::copy(node.centerOfMass.begin(),
-                                      node.centerOfMass.end(),
-                                      com.begin());
-
-                            // Subtract our our node from the mix
-                            com -= y;
-
-                            // Normalized by number of children
-                            com *= 1.0 / effectiveNumChildren;
-
-                            // Turn into a distance from y
-                            com -= y;
-
-                            dist = com.two_norm();
-                        }
-                    } else {
-                        if (nd == 2) {
-                            double ncr = 1.0 / node.numChildren;
-                            com[0] = (node.centerOfMass[0] * ncr) - y[0];
-                            com[1] = (node.centerOfMass[1] * ncr) - y[1];
-                            dist = sqrt(com[0] * com[0] + com[1] * com[1]);
-                        }
-                        else {
-
-                            // 1.  Calculate the distance between this y point and the
-                            //     node center
-                            std::copy(node.centerOfMass.begin(),
-                                      node.centerOfMass.end(),
-                                      com.begin());
-
-                            // Normalized by number of children
-                            com *= 1.0 / node.numChildren;
-
-                            // Turn into a distance from y
-                            com -= y;
-
-                            dist = com.two_norm();
+                    // If we want to calculate C, we store the log of
+                    // the cell's Q * Z for each point of interest so that
+                    // we can calculate the cost later.
+                    if (calcC) {
+                        auto & contained = nodeContains[node.nodeNumber];
+                        if (!contained.empty()) {
+                            double logqCellZ = logf(qCellZ);
+                            for (int node: contained) {
+                                logqZ[x][node] = logqCellZ;
+                            }
                         }
                     }
-
-                    double diag = node.diagonalLength();
-                    double ratio = diag / dist;
-
-                    //cerr << "dist = " << dist << " diag = " << diag
-                    //     << " ratio = " << ratio << endl;
-
-                    if (node.type == QuadtreeNode::TERMINAL
-                        || effectiveNumChildren == 1
-                        || (ratio < 0.4 && !exact)) {
-
-                        double qCellZ = 1.0 / (1.0 + dist * dist);
-                        if (dist == 0.0) {
-                            cerr << "DISTANCE OF ZERO" << endl;
-                            cerr << "effectiveNumChildren = "
-                                 << effectiveNumChildren << endl;
-                            cerr << "node.numChildren = " << node.numChildren
-                                 << endl;
-                            cerr << "containsY = " << containsY << endl;
-                            cerr << "node.mins = " << node.mins << endl;
-                            cerr << "node.maxs = " << node.maxs << endl;
-                            cerr << "node.center = " << node.center << endl;
-                            cerr << "node.child = " << node.child << endl;
-                            cerr << "point = " << y << endl;
-                        }
-
-
-                        exampleZ += effectiveNumChildren * qCellZ;
-
-                        for (unsigned i = 0;  i < nd;  ++i) {
-                            FrepZ[x][i] += effectiveNumChildren * com[i] * qCellZ * qCellZ;
-                        }
-
-                        if (x == 25 && false) {
-                            if (node.type != QuadtreeNode::TERMINAL && !donePrint) {
-                                donePrint = true;
-                                cerr << "SHORT CIRCUITING" << endl;
-                                cerr << "effectiveNumChildren = "
-                                     << effectiveNumChildren << endl;
-                                cerr << "node.numChildren = " << node.numChildren
-                                     << endl;
-                                cerr << "containsY = " << containsY << endl;
-
-                                cerr << "qCellZ = " << qCellZ << endl;
-                                cerr << "dist = " << dist << endl;
-
-                                //double realTotal = 0.0;
-
-                                std::function<std::tuple<double, distribution<double> > (const QuadtreeNode & node, int)>
-                                    onNode = [nd,y,&onNode] (const QuadtreeNode & node, int depth)
-                                    {
-                                        double ncr = 1.0 / node.numChildren;
-                                        ML::distribution<double> com(2);
-                                        com[0] = (node.centerOfMass[0] * ncr) - y[0];
-                                        com[1] = (node.centerOfMass[1] * ncr) - y[1];
-                                        double dist = sqrt(com[0] * com[0] + com[1] * com[1]);
-                                        double qCellZ = 1.0 / (1.0 + dist * dist);
-                                        string s(depth * 2, ' ');
-
-                                        ML::distribution<double> FrepZ(nd);
-
-                                        for (unsigned i = 0;  i < nd;  ++i) {
-                                            FrepZ[i] = node.numChildren * com[i] * qCellZ * qCellZ;
-                                        }
-
-                                        ML::distribution<double> FrepZReal(nd);
-
-                                        double realTotal = 0.0;
-
-                                        for (auto & s: node.quadrants) {
-                                            ML::distribution<double> FrepChild;
-                                            double totalChild;
-                                            std::tie(totalChild, FrepChild)
-                                                = onNode(*s.second, depth + 1);
-
-                                            realTotal += totalChild;
-                                            FrepZReal += FrepChild;
-                                            
-                                        }
-
-                                        if (node.quadrants.empty()) {
-                                            cerr << s << "dist " << dist << " total " << qCellZ
-                                            << " FrepZ " << FrepZ[0]
-                                            << endl;
-                                            return make_pair(qCellZ, FrepZ); 
-                                        }
-                                        else {
-                                            cerr << s << "dist " << dist << " total " << node.numChildren * qCellZ
-                                            << " real " << realTotal << " FrepZ " << FrepZ[0]
-                                            << " real " << FrepZReal[0] << endl;
-                                            return make_pair(realTotal, FrepZReal); 
-                                        }
-
-                                    };
-
-                                onNode(node, 0);
-                            }
-
-                        }
-
-                        // If we want to calculate C, we store the log of
-                        // the cell's Q * Z for each point of interest so that
-                        // we can calculate the cost later.
-                        if (calcC) {
-                            auto & contained = nodeContains[node.nodeNumber];
-                            if (!contained.empty()) {
-                                double logqCellZ = logf(qCellZ);
-                                for (int node: contained) {
-                                    logqZ[x][node] = logqCellZ;
-                                }
-                            }
-                        }
-
-#if 0
-                        if (node.type != QuadtreeNode::TERMINAL
-                            && !doingTest && x == 24) {
-                            doingTest = true;
-                            double savedExampleZ = exampleZ;
-                            exampleZ = 0.0;
-                            for (auto & q: node.quadrants) {
-                                onNode(*q.second, depth + 1);
-                            }
-                            double realqCellZ = exampleZ;
-                            exampleZ = savedExampleZ;
-                            doingTest = false;
-
-                            cerr << "Approx qCellZ = " << qCellZ
-                                 << " real qCellZ = " << realqCellZ
-                                 << " difference "
-                                 << ML::format("%02f", fabs(qCellZ - realqCellZ) / min(fabs(qCellZ),fabs(realqCellZ)) * 100.0) << "%" << endl;
-                        }
-#endif
-
-                        return false;
-                    }
-
-                    return true;  // continue recursing
                 };
 
-                // Calculate approximate solution
-                qtree.root->walk(onNode);
-
-#if 0
-                double Zsaved = exampleZ;
-
-                double FrepZSaved[nd];
-                for (unsigned i = 0;  i < nd;  ++i) {
-                    FrepZSaved[i] = FrepZ[x][i];
-                    FrepZ[x][i] = 0.0;
+                if (calcC) {
+                    calcRep(*qtree.root, 0, true /* inside */,
+                            y, &FrepZ[x][0], exampleZ, nodesTouched, nd, exact,
+                            onNode);
+                } else {
+                    calcRep(*qtree.root, 0, true /* inside */,
+                            y, &FrepZ[x][0], exampleZ, nodesTouched, nd, exact,
+                            nullptr);
                 }
-
-                // Calculate exact solution
-                exact = true;
-                exampleZ = 0.0;
-
-                qtree.root->walk(onNode);
-
-                if (x == 25) {
-                    cerr << "X = " << x << " exampleZ = " << exampleZ
-                         << " Zsaved = " << Zsaved
-                         << " Frep[0] = "
-                         << FrepZSaved[0] << " real = " << FrepZ[x][0]
-                         << " Frep[1] = "
-                         << FrepZSaved[1] << " real = " << FrepZ[x][1] << endl;
-                }
-
-                exampleZ = Zsaved;
-#endif
 
                 {
                     std::unique_lock<ML::Spinlock> guard(Zmutex);
@@ -1794,14 +1718,23 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
                 //         << endl;
             };
 
-#if 1
+#if 0
         int totalThreads = 4;
 
         auto doThread = [&] (int n)
             {
-                for (unsigned x = n;  x < nx;  x += totalThreads) {
+                int perThread = nx / totalThreads;
+                int start = n * perThread;
+                int end = start + perThread;
+                if (n == totalThreads)
+                    end = nx;
+
+                for (unsigned x = start;  x < end;  ++x)
                     calcExample(x);
-                }
+
+                //for (unsigned x = n;  x < nx;  x += totalThreads) {
+                //    calcExample(x);
+                //}
             };
 
         ML::run_in_parallel(0, totalThreads, doThread);
@@ -1952,12 +1885,17 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
         cerr << "Capprox = " << Capprox << " C = " << C << endl;
 #endif
 
+        float maxAbsDy = 0.0;
+        float maxAbsY = 0.0;
+
         for (unsigned x = 0;  x < nx;  ++x) {
             for (unsigned i = 0;  i < nd;  ++i) {
                 //dY[x][i] = 4.0 * (Fattr[x][i] + Frep[x][i]);
                 //dY[x][i] = 4.0 * (FattrApprox[x][i] + Frep[x][i]);
                 //dY[x][i] = 4.0 * (Fattr[x][i] + FrepApprox[x][i]);
                 dY[x][i] = 4.0 * (FattrApprox[x][i] + FrepApprox[x][i]);
+                maxAbsDy = std::max(maxAbsDy, fabs(dY[x][i]));
+                maxAbsY = std::max(maxAbsY, Y[x][i]);
 
 #if 0
                 if (x < 5) {
@@ -2018,12 +1956,43 @@ tsneApprox(const boost::multi_array<float, 2> & probs,
         if (callback
             && !callback(iter, cost, "recenter")) return Y;
 
-        if ((iter + 1) % 10 == 0 || iter == params.max_iter - 1) {
+        if ((iter + 1) % 100 == 0 || iter == params.max_iter - 1) {
             cerr << format("iteration %4d cost %6.3f  ",
                            iter + 1, cost)
                  << timer.elapsed() << endl;
             timer.restart();
         }
+        
+        float maxAbsCoord[nd];
+        std::fill(maxAbsCoord, maxAbsCoord + nd, 0.0);
+
+        boost::multi_array<float, 2> normalizedY(boost::extents[nx][nd]);
+        for (unsigned x = 0;  x < nx;  ++x) {
+            for (unsigned i = 0;  i < nd;  ++i) {
+                maxAbsCoord[i] = std::max(maxAbsCoord[i], fabs(Y[x][i]));
+            }
+        }
+
+        float maxCoordChange = 0.0;
+
+        for (unsigned x = 0;  x < nx;  ++x) {
+            for (unsigned i = 0;  i < nd;  ++i) {
+                normalizedY[x][i] = Y[x][i] / maxAbsCoord[i];
+                maxCoordChange = std::max(maxCoordChange, fabs(normalizedY[x][i] - lastNormalizedY[x][i]));
+            }
+        }
+
+        lastNormalizedY = normalizedY;
+
+        //cerr << "maxCoordChange = " << maxCoordChange << endl;
+
+        //cerr << "maxAbsDy = " << maxAbsDy << " maxAbsY = " << maxAbsY
+        //     << " ratio " << 100.0 * maxAbsDy / maxAbsY
+        //     << " maxCoordChange = " << maxCoordChange << endl;
+
+        if (maxCoordChange < 0.001 && iter > 200)
+            return Y;
+            
         
 
         // Stop lying about P values if we're finished
