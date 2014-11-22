@@ -71,12 +71,12 @@ def test_tsne():
     nrows = digits.shape[0];
     # Smaller number of labels for debugging...
     if not options.all_data:
-        nrows = 250
+        nrows = 2500
 
     X = digits[range(nrows), ...]
     L = labels[range(nrows), ...]
 
-    Y = tsne.tsne(X, 2, 50, 20.0, use_pca=True, max_iter=1000)
+    Y = tsne.tsne(X, 2, 300, 20.0, use_pca=True, approx=True, max_iter=1000, min_iter=200)
     #Y = tsne.tsne(X, 2, 50, 20.0, use_pca=False)
 
     for i in xrange(10):

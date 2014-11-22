@@ -325,13 +325,14 @@ tsne_tsne(PyObject *self, PyObject *args, PyObject * kwds)
     int num_dims = 2;
 
     static const char * const kwlist[] =
-        { "array", "num_dims", "max_iter", "initial_momentum", "final_momentum",
+        { "array", "num_dims", "min_iter", "max_iter", "initial_momentum", "final_momentum",
           "eta", "min_gain", "min_prob", NULL };
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds,
-                                     "O!|iiddddd", (char **)kwlist,
+                                     "O!|iiiddddd", (char **)kwlist,
                                      &PyArray_Type, &in_array,
                                      &num_dims,
+                                     &params.min_iter,
                                      &params.max_iter,
                                      &params.initial_momentum,
                                      &params.final_momentum,
@@ -371,11 +372,11 @@ tsne_tsne(PyObject *self, PyObject *args, PyObject * kwds)
         PyThreads threads(UNBLOCK);
 
         /* Copy into a boost multi array (TODO: avoid this copy) */
-        boost::multi_array<float, 2> array(boost::extents[n][n]);
+        boost::multi_array<float, 2> array(boost::extents[n][n2]);
 
         const float * data_in = (const float *)PyArray_DATA(input_as_float32);
 
-        std::copy(data_in, data_in + (n * n), array.data());
+        std::copy(data_in, data_in + (n * n2), array.data());
 
         input_as_float32.release();
 
@@ -384,7 +385,7 @@ tsne_tsne(PyObject *self, PyObject *args, PyObject * kwds)
                    boost::bind(tsne_callback,
                                threads.signals_before,
                                _1, _2, _3));
-        
+   
         if (threads.interrupted())
             throw Interrupt_Exception();
 
@@ -403,6 +404,89 @@ tsne_tsne(PyObject *self, PyObject *args, PyObject * kwds)
     return result_array.release<PyObject>();
 }
 
+static PyObject *
+tsne_tsneApproxFromCoords(PyObject *self, PyObject *args, PyObject * kwds)
+{
+    PyObject * in_array;
+    TSNE_Params params;
+
+    int num_dims = 2;
+
+    static const char * const kwlist[] =
+        { "array", "num_dims", "min_iter", "max_iter", "initial_momentum", "final_momentum",
+          "eta", "min_gain", "min_prob", NULL };
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds,
+                                     "O!|iiiddddd", (char **)kwlist,
+                                     &PyArray_Type, &in_array,
+                                     &num_dims,
+                                     &params.min_iter,
+                                     &params.max_iter,
+                                     &params.initial_momentum,
+                                     &params.final_momentum,
+                                     &params.eta,
+                                     &params.min_gain,
+                                     &params.min_prob))
+        return NULL;
+
+    /* Convert the input array to a float array. */
+    PyArrayRef input_as_float32
+        = PyArray_FromAny(in_array,
+                          PyArray_DescrFromType(NPY_FLOAT32),
+                          2, 2,
+                          NPY_C_CONTIGUOUS | NPY_FORCECAST | NPY_ALIGNED,
+                          0);
+    if (!input_as_float32)
+        return NULL;
+    
+    int nx = PyArray_DIM(input_as_float32, 0);
+    int nd = PyArray_DIM(input_as_float32, 1);
+
+    /* Allocate an object (in memory) for the result */
+    npy_intp npy_shape[2] = { nx, num_dims };
+    PyArrayRef result_array
+        = PyArray_SimpleNew(2 /* num dims */,
+                            npy_shape,
+                            NPY_FLOAT);
+    if (!result_array)
+        return NULL;
+    
+    try {
+        PyThreads threads(UNBLOCK);
+
+        /* Copy into a boost multi array (TODO: avoid this copy) */
+        boost::multi_array<float, 2> array(boost::extents[nx][nd]);
+
+        const float * data_in = (const float *)PyArray_DATA(input_as_float32);
+
+        std::copy(data_in, data_in + (nd * nx), array.data());
+
+        input_as_float32.release();
+
+        boost::multi_array<float, 2> result
+            = tsneApproxFromCoords(array, num_dims, params,
+                   boost::bind(tsne_callback,
+                               threads.signals_before,
+                               _1, _2, _3));
+   
+        if (threads.interrupted())
+            throw Interrupt_Exception();
+
+        if (result.shape()[0] != nx || result.shape()[1] != num_dims)
+            throw Exception("wrong shapes");
+        
+        float * data_out = (float *)PyArray_DATA(result_array);
+        
+        std::copy(result.data(), result.data() + nx * num_dims, data_out);
+    } catch (const std::exception & exc) {
+        return to_python_exception(exc);
+    } catch (...) {
+        return to_python_exception();
+    }
+
+    return result_array.release<PyObject>();
+}
+
 static PyMethodDef TsneMethods[] = {
     {"vectors_to_distances",  tsne_vectors_to_distances, METH_VARARGS,
      "Convert an array of vectors in a coordinate space to a symmetric square"
@@ -411,7 +495,9 @@ static PyMethodDef TsneMethods[] = {
      "Convert an array of distances between points to an array of joint "
      "probabilities by modelling as gaussians."},
     {"tsne",  (PyCFunction)tsne_tsne, METH_VARARGS | METH_KEYWORDS,
-     "reduce the (n x d) matrix to a (n x num_dims) matrix using t-SNE."},
+     "reduce the (n x n) contingent probability matrix to a (n x num_dims) matrix using an exact, n squared version of t-SNE."},
+    {"tsne_approx_from_coords",  (PyCFunction)tsne_tsneApproxFromCoords, METH_VARARGS | METH_KEYWORDS,
+     "reduce the (n x d) coordinate matrix to a (n x num_dims) matrix using an approximate, n log n version of t-SNE."},
     {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 

@@ -12,6 +12,9 @@ def distances_to_probabilities(array, tolerance=1e-5, perplexity=30.0):
 def tsne_core(array, num_dims=2, **kwargs):
     return _tsne.tsne(array, num_dims, **kwargs)
 
+def tsne_core_approx_from_coords(array, num_dims=2, **kwargs):
+    return _tsne.tsne_approx_from_coords(array, num_dims, **kwargs)
+
 
 def pca(X, no_dims=50):
     """
@@ -35,16 +38,19 @@ def pca(X, no_dims=50):
 
 
 def tsne(X, num_dims=2, initial_dims=50, perplexity=30.0, use_pca=True,
-         **kwargs):
+         approx=True, **kwargs):
 
     if use_pca:
         X = pca(X, initial_dims)
     (n, d) = X.shape
 
+    print kwargs
+
+    if approx:
+        return tsne_core_approx_from_coords(X, num_dims, **kwargs)
+
     D = vectors_to_distances(X)
 
     P = distances_to_probabilities(D, perplexity=perplexity)
-
-    print kwargs
 
     return tsne_core(P, num_dims, **kwargs)
