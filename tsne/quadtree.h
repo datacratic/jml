@@ -20,7 +20,7 @@ struct QuadtreeNode {
     QuadtreeNode(QCoord mins, QCoord maxs, QCoord child)
         : mins(mins), maxs(maxs), type(TERMINAL),
           numChildren(1), child(child), centerOfMass(child),
-          parentNodeNumber(-1), nodeNumber(-1)
+          quadrants(1 << mins.size())
     {
         center.resize(mins.size());
         for (unsigned i = 0;  i < mins.size();  ++i) {
@@ -35,8 +35,8 @@ struct QuadtreeNode {
     /** Construct empty. */
     QuadtreeNode(QCoord mins, QCoord maxs)
         : mins(mins), maxs(maxs), type(EMPTY), numChildren(0),
-          centerOfMass(mins.size()), parentNodeNumber(-1),
-          nodeNumber(-1)
+          centerOfMass(mins.size()),
+          quadrants(1 << mins.size())
     {
         center.resize(mins.size());
         for (unsigned i = 0;  i < mins.size();  ++i) {
@@ -44,6 +44,13 @@ struct QuadtreeNode {
         }
 
         diag = diagonalLength();
+    }
+
+    ~QuadtreeNode()
+    {
+        for (auto & q: quadrants)
+            if (q)
+                delete q;
     }
 
     QCoord mins;   ///< Minimum coordinates for bounding box
@@ -62,13 +69,8 @@ struct QuadtreeNode {
     QCoord centerOfMass;  ///< Center of mass of children, or child if terminal
     float recipNumChildren[2];  //< 1/numChildren, 1/(numChildren-1
 
-    int parentNodeNumber;  ///< Node number of the parent node
-    int nodeNumber;        ///< Number of this node; calculated by finish()
-
     /** The different quadrants for when we're a NODE. */
-    std::map<int, std::unique_ptr<QuadtreeNode> > quadrants;
-
-    //std::compact_vector<std::unique_ptr<QuadTreeNode>, 4> quadrants;
+    ML::compact_vector<QuadtreeNode *, 4, uint32_t, true> quadrants;
 
     /** Insert the given point into the tree. */
     void insert(QCoord point, int depth = 0, int n = 1)
@@ -105,8 +107,7 @@ struct QuadtreeNode {
         else if (type == NODE) {
             // Insertion into an existing quad
             int quad = quadrant(center, point);
-            auto it = quadrants.find(quad);
-            if (it == quadrants.end()) {
+            if (!quadrants[quad]) {
                 // Create a new quadrant
                 QCoord newMins(point.size());
                 QCoord newMaxs(point.size());
@@ -118,10 +119,10 @@ struct QuadtreeNode {
                     newMaxs[i] = less ? center[i] : maxs[i];
                 }
 
-                quadrants[quad].reset(new QuadtreeNode(newMins, newMaxs, point));
+                quadrants[quad] = new QuadtreeNode(newMins, newMaxs, point);
             } else {
                 // Recurse down into existing quadrant
-                it->second->insert(point, depth + 1);
+                quadrants[quad]->insert(point, depth + 1);
             }
 
             numChildren += n;
@@ -157,26 +158,21 @@ struct QuadtreeNode {
             return;
         if (type == NODE) {
             for (auto & q: quadrants) {
-                q.second->walk(fn, depth + 1);
+                if (q) q->walk(fn, depth + 1);
             }
         }
     }
 
     /** Finish the structure, including calculating node numbers */
-    int finish(int currentNodeNumber = 0, int parentNodeNumber = -1)
+    int finish(int currentNodeNumber = 0)
     {
-        ExcAssertEqual(nodeNumber, -1);
-
-        this->parentNodeNumber = parentNodeNumber;
-        nodeNumber = currentNodeNumber;
-        ++currentNodeNumber;
         recipNumChildren[0] = 1.0 / numChildren;
         recipNumChildren[1] = 1.0 / (numChildren - 1);
 
-        for (auto & q: quadrants) {
-            currentNodeNumber
-                = q.second->finish(currentNodeNumber, this->nodeNumber);
-        }
+        for (unsigned i = 0;  i < (1 << center.size());  ++i)
+            if (quadrants[i])
+                currentNodeNumber
+                    = quadrants[i]->finish(currentNodeNumber);
         
         return currentNodeNumber;
     }

@@ -24,6 +24,10 @@ namespace ML {
 struct VantagePointTree;
 struct Quadtree;
 
+/** Calculate the probability distribution that gives the given
+    perplexity.  The input in D is the *square* of the distances
+    to the points.
+*/
 std::pair<double, distribution<float> >
 perplexity_and_prob(const distribution<float> & D, double beta = 1.0,
                     int i = -1);
@@ -118,12 +122,15 @@ struct TSNE_Params {
           perplexity(20),
           tolerance(1e-5),
           randomSeed(0),
+          min_iter(200),
           max_iter(1000),
           initial_momentum(0.5),
           final_momentum(0.8),
           eta(500),
           min_gain(0.01),
-          min_prob(1e-12)
+          min_prob(1e-12),
+          min_distance_ratio(0.6),
+          max_coord_change(0.0005)
     {
     }
 
@@ -133,12 +140,16 @@ struct TSNE_Params {
 
     int randomSeed;
 
+    int min_iter;
     int max_iter;
     double initial_momentum;
     double final_momentum;
     double eta;
     double min_gain;
     double min_prob;
+
+    double min_distance_ratio;  // 0 means never approximate; 1 means approximate everything
+    double max_coord_change;    // stop once no coordinate has changed its relative pos by this
 };
 
 // Function that will be used as a callback to provide progress to a calling
@@ -231,11 +242,11 @@ sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
     - newExampleCoords: the coordinates of the new example to calculate
       probabilities for
     - tree: the vantage point tree output from sparseProbsFromCoords()
-    - removeOne: if this is true, then this example is in the tree and
+    - toRemove: if this is != -1, then this example is in the tree and
       needs to be removed (there will be a zero distance entry in each
       which must be got rid of).  If it is a new example that wasn't in
       those presented to sparseProbsFromCoords(), then it should be
-      false.
+      left at -1.
 
     Output:
     - as in sparseProbsFromCoords()
@@ -247,7 +258,7 @@ sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
                       int numNeighbours,
                       double perplexity,
                       double tolerance = 1e-5,
-                      bool removeOne = false);
+                      int toRemove = -1);
 
 /** Re-run t-SNE over the given high dimensional probability vector for a
     single example, figuring out where that example should be embedded in

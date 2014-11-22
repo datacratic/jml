@@ -1151,7 +1151,7 @@ tsne(const boost::multi_array<float, 2> & probs,
         if (callback
             && !callback(iter, cost, "gradient")) return Y;
 
-#if 1
+#if 0
         cerr << "C = " << cost << endl;
         for (unsigned x = 0;  x < 5;  ++x) {
 
@@ -1266,7 +1266,7 @@ sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
         {
             neighbours[x]
                 = sparseProbsFromCoords(coords, &coords[x][0], *tree, numNeighbours,
-                                        perplexity, tolerance, true /* remove one */);
+                                        perplexity, tolerance, x /* to remove */);
         };
 
     run_in_parallel_blocked(0, nx, calcExample);
@@ -1284,7 +1284,7 @@ sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
                       int numNeighbours,
                       double perplexity,
                       double tolerance,
-                      bool removeOne)
+                      int toRemove)
 {
     int nd = coords.shape()[1];
 
@@ -1303,13 +1303,39 @@ sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
 
     // Remove the closest one if asked (this is needed when this example itself is
     // in the tree
-    if (removeOne) {
-        // Check that it really did have zero distance
-        ExcAssertEqual(exNeighbours[0].first, 0.0);
-
+    if (toRemove != -1) {
         ExcAssertGreaterEqual(exNeighbours.size(), 1);
 
-        exNeighbours.erase(exNeighbours.begin(), exNeighbours.begin() + 1);
+        int foundAt = -1;
+        for (unsigned i = 0;  i < exNeighbours.size();  ++i) {
+            if (exNeighbours[i].second == toRemove) {
+                foundAt = i;
+                break;
+            }
+        }
+
+        if (foundAt == -1) {
+            static std::mutex mutex;
+            std::unique_lock<std::mutex> guard(mutex);
+
+            for (unsigned i = 0;  i < nd;  ++i)
+                cerr << "incoords[" << i << "] = "
+                     << coords[0][i] << endl;
+            for (unsigned i = 0;  i < nd;  ++i)
+                cerr << "coords[" << i << "] = "
+                     << newExampleCoords[i] << endl;
+            for (unsigned i = 0;  i < exNeighbours.size();  ++i) {
+                cerr << "  " << i << " neighbour " << exNeighbours[i].second
+                     << " dist " << exNeighbours[i].first << endl;
+            }
+        }
+
+        ExcAssertNotEqual(foundAt, -1);
+
+        // Check that it really did have zero distance
+        ExcAssertEqual(exNeighbours[foundAt].first, 0.0);
+
+        exNeighbours.erase(exNeighbours.begin() + foundAt);
     }
 
     // Sort by index number
@@ -1319,12 +1345,14 @@ sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
     vector<int> indexes(exNeighbours.size());
     distribution<float> distances(exNeighbours.size());
 
-    for (unsigned i = 0;  i < exNeighbours.size();  ++i)
+    for (unsigned i = 0;  i < exNeighbours.size();  ++i) {
         std::tie(distances[i], indexes[i]) = exNeighbours[i];
-        
-    // Now calculate the perplexity
+    }
+ 
+    // Now calculate the perplexity.  Note that it operates on the
+    // square of distances.
     std::tie(result.probs, std::ignore)
-        = binary_search_perplexity(distances, perplexity, -1, tolerance);
+        = binary_search_perplexity(distances * distances, perplexity, -1, tolerance);
 
     // put it back in the node
     result.indexes = std::move(indexes);
@@ -1395,9 +1423,11 @@ struct CalcRepContext {
                    bool exact,
                    const std::function<void (const QuadtreeNode & node,
                                              double qCellZ, const std::vector<int> & poi)> & onNode,
-                   const std::function<const QCoord & (int)> & getPointCoord)
+                   const std::function<const QCoord & (int)> & getPointCoord,
+                   float minDistanceRatio)
         : y(y), FrepZ(FrepZ), exampleZ(exampleZ), nodesTouched(nodesTouched),
-          nd(nd), exact(exact), onNode(onNode), getPointCoord(getPointCoord)
+          nd(nd), exact(exact), onNode(onNode), getPointCoord(getPointCoord),
+          minDistanceRatio(minDistanceRatio)
     {
     }
 
@@ -1413,6 +1443,8 @@ struct CalcRepContext {
 
     /// Used to get the coordinate of a point of interest passed in pointsInside
     const std::function<const QCoord & (int)> & getPointCoord;
+
+    float minDistanceRatio;
 
     std::vector<int> NO_POINTS;
 
@@ -1449,7 +1481,7 @@ struct CalcRepContext {
 
         if (node.type == QuadtreeNode::TERMINAL
             || effectiveNumChildren == 1
-            || (node.diag < 0.6 * sqrtf(distSq) && !exact)) {
+            || (node.diag < minDistanceRatio * sqrtf(distSq) && !exact)) {
 
             float qCellZ = 1.0f / (1.0f + distSq);
             if (distSq == 0.0) {
@@ -1492,17 +1524,17 @@ struct CalcRepContext {
             int quad = -1;
             if (inside)
                 quad = node.quadrant(y);
-            for (auto & q: node.quadrants) {
-                calc(*q.second, depth + 1, q.first == quad, quadrantPoints[q.first]);
-            }
+            for (unsigned i = 0;  i < (1 << nd);  ++i)
+                if (node.quadrants[i])
+                    calc(*node.quadrants[i], depth + 1, i == quad, quadrantPoints[i]);
         }
         else {
             int quad = -1;
             if (inside)
                 quad = node.quadrant(y);
-            for (auto & q: node.quadrants) {
-                calc(*q.second, depth + 1, q.first == quad, NO_POINTS);
-            }
+            for (unsigned i = 0;  i < (1 << nd);  ++i)
+                if (node.quadrants[i])
+                    calc(*node.quadrants[i], depth + 1, i == quad, NO_POINTS);
         }
     }
 };
@@ -1520,9 +1552,11 @@ void calcRep(const QuadtreeNode & node,
              const std::function<void (const QuadtreeNode & node,
                                        double qCellZ, const std::vector<int> & poi)> & onNode,
              const std::vector<int> & pointsOfInterest,
-             const std::function<const QCoord & (int)> & getPointCoord)
+             const std::function<const QCoord & (int)> & getPointCoord,
+             float minDistanceRatio)
 {
-    CalcRepContext context(y, FrepZ, exampleZ, nodesTouched, nd, exact, onNode, getPointCoord);
+    CalcRepContext context(y, FrepZ, exampleZ, nodesTouched, nd, exact, onNode, getPointCoord,
+                           minDistanceRatio);
     context.calc(node, depth, inside, pointsOfInterest);
 }
 
@@ -1538,6 +1572,31 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
 
     int nx = exampleNeighbours.size();
     int nd = num_dims;
+
+    // Verify that no point is its own neighbour and that no probability is zero
+    for (unsigned j = 0;  j < nx;  ++j) {
+        if (exampleNeighbours[j].indexes.empty())
+            throw ML::Exception("tsneApproxFromSparse(): point %d has no neighbours",
+                                j);
+        if (exampleNeighbours[j].indexes.size()
+            != exampleNeighbours[j].probs.size())
+            throw ML::Exception("tsneApproxFromSparse(): point %d index and probs "
+                                "sizes don't match: %zd != %zd",
+                                exampleNeighbours[j].indexes.size(),
+                                exampleNeighbours[j].probs.size());
+
+        for (unsigned i = 0;  i < exampleNeighbours[i].indexes.size();  ++i) {
+            int index = exampleNeighbours[j].indexes[i];
+            //float prob = exampleNeighbours[j].probs[i];
+
+            if (index ==j)
+                throw ML::Exception("tsneApproxFromSparse: error in input: point %d is "
+                                    "its own neighbour");
+            //if (prob == 0.0)
+            //    throw ML::Exception("tsneApproxFromSparse: error in input: point %d has "
+            //                        "zero probability");
+        }
+    }
 
     boost::multi_array<float, 2> Y = tsne_init(nx, nd, params.randomSeed);
 
@@ -1752,7 +1811,8 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
 
                     calcRep(*qtree.root, 0, true /* inside */,
                             y, &FrepZ[x][0], exampleZ, nodesTouched, nd, exact,
-                            onNode, pointsOfInterest, getPointCoord);
+                            onNode, pointsOfInterest, getPointCoord,
+                            params.min_distance_ratio);
                     ExcAssertEqual(poiDone, neighbours.indexes.size());
                     //if (!isfinite(exampleCFactor[x]))
                     //    cerr << "x = " << x << " factor " << exampleCFactor[x] << endl;
@@ -1760,7 +1820,7 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
                 } else {
                     calcRep(*qtree.root, 0, true /* inside */,
                             y, &FrepZ[x][0], exampleZ, nodesTouched, nd, exact,
-                            nullptr, {}, nullptr);
+                            nullptr, {}, nullptr, params.min_distance_ratio);
                 }
 
                 {
@@ -1774,7 +1834,7 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
             };
 
 #if 1
-        int totalThreads = 4;
+        int totalThreads = std::min(16, num_threads() / 2);
 
         auto doThread = [&] (int n)
             {
@@ -2098,7 +2158,7 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
         //     << " ratio " << 100.0 * maxAbsDy / maxAbsY
         //     << " maxCoordChange = " << maxCoordChange << endl;
 
-        if (maxCoordChange < 0.001 && iter > 200)
+        if (maxCoordChange < params.max_coord_change && iter > params.min_iter)
             return Y;
             
         // Stop lying about P values if we're finished 100 iterations
@@ -2219,6 +2279,7 @@ retsne(const ML::distribution<float> & probs_,
         neighbourCoords[i] = QCoord(&Y[neighbours[i]][0], &Y[neighbours[i]][0] + nd);
     }
 
+#if 0
     // Now traverse the quadtree, splitting up the list of neighbours so that we
     // have a list of them at each node
     std::function<void (QuadtreeNode & node, const std::vector<int> &) > distributeNeighbours
@@ -2240,8 +2301,10 @@ retsne(const ML::distribution<float> & probs_,
                 for (auto & n: neighbours) {
                     quadrants[node.quadrant(node.center, neighbourCoords[n])].push_back(n);
                 }
-
-                for (auto & q: quadrants) {
+                
+                for (unsigned i = 0;  i < (1 << nd);  ++i) {
+                    if (!quadrants[i])
+                    ExcAssert(node.quadrants[i]);
                     auto it = node.quadrants.find(q.first);
                     ExcAssert(it != node.quadrants.end());
                     distributeNeighbours(*it->second, q.second);
@@ -2255,6 +2318,7 @@ retsne(const ML::distribution<float> & probs_,
         iota.push_back(i);
 
     distributeNeighbours(*qtree.root, iota);
+#endif
 
     //cerr << "done distributing" << endl;
 
@@ -2336,6 +2400,7 @@ retsne(const ML::distribution<float> & probs_,
                         FrepZApprox[i] += com[i] * qCellZ * qCellZ;
                     }
 
+#if 0
                     // If we want to calculate C, we store the log of
                     // the cell's Q * Z for each point of interest so that
                     // we can calculate the cost later.
@@ -2349,6 +2414,7 @@ retsne(const ML::distribution<float> & probs_,
                         }
                     }
                     return false;
+#endif
                 }
 
                 return true;  // continue recursing
