@@ -1418,6 +1418,17 @@ sparseProbsFromCoords(const std::function<float (int)> & dist,
     std::tie(result.probs, std::ignore)
         = binary_search_perplexity(distances * distances, perplexity, -1, tolerance);
 
+    // Don't allow zero probabilities
+    for (auto & p: result.probs) {
+        p = std::max(p, 1e-12f);
+    }
+
+    if ((result.probs == 0.0).any()) {
+        cerr << "probs " << result.probs << endl;
+        cerr << "distances " << distances << endl;
+        throw ML::Exception("zero probability from perplexity calculation");
+    }
+
     // put it back in the node
     result.indexes = std::move(indexes);
     
@@ -1432,9 +1443,16 @@ symmetrize(const std::vector<TsneSparseProbs> & input)
     
     for (unsigned j = 0;  j < input.size();  ++j) {
         const TsneSparseProbs & p = input[j];
+
+        // Check that the neighbour list is not empty
+        ExcAssert(!p.indexes.empty());
+
         for (unsigned i = 0;  i < p.indexes.size();  ++i) {
             // Check the input (we can't be our own neighbour)
             ExcAssertNotEqual(p.indexes[i], j);
+
+            // Check that the probability is non-zero
+            ExcAssertGreater(p.probs[i], 0.0);
 
             // +1 is to avoid inserting 0 into a lightweight hash
             probs[p.indexes[i]][j + 1] += p.probs[i];
@@ -1686,12 +1704,12 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
     // Verify that no point is its own neighbour and that no probability is zero
     for (unsigned j = 0;  j < nx;  ++j) {
         if (exampleNeighbours[j].indexes.empty())
-            throw ML::Exception("tsneApproxFromSparse(): point %d has no neighbours",
-                                j);
+            throw ML::Exception("tsneApproxFromSparse(): point %d has no"
+                                " neighbours", j);
         if (exampleNeighbours[j].indexes.size()
             != exampleNeighbours[j].probs.size())
-            throw ML::Exception("tsneApproxFromSparse(): point %d index and probs "
-                                "sizes don't match: %zd != %zd",
+            throw ML::Exception("tsneApproxFromSparse(): point %d index and "
+                                "probs sizes don't match: %zd != %zd",
                                 exampleNeighbours[j].indexes.size(),
                                 exampleNeighbours[j].probs.size());
 
@@ -1700,8 +1718,8 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
             //float prob = exampleNeighbours[j].probs[i];
 
             if (index ==j)
-                throw ML::Exception("tsneApproxFromSparse: error in input: point %d is "
-                                    "its own neighbour");
+                throw ML::Exception("tsneApproxFromSparse: error in input: "
+                                    "point %d is its own neighbour");
             //if (prob == 0.0)
             //    throw ML::Exception("tsneApproxFromSparse: error in input: point %d has "
             //                        "zero probability");
@@ -2012,17 +2030,45 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
             // C[x] = sum_j P[x][j] log P[x][j] - sum_j P[x][j] log q[x][j]
             //      = sum_j P[x][j] log P[x][j] - sum_j P[x][j] log Zq[j][j] + sum_j P[x][j] log Z
             //      = sum_j P[x][j] log Z P[x][j] - exampleCFactor[x]
+
+            double logZapprox = log(ZApprox);
+            double logpFactor = log(pFactor);
+
             for (unsigned x = 0;  x < nx;  ++x) {
 
                 const TsneSparseProbs & neighbours = exampleNeighbours[x];
 
-                double Cexample = -exampleCFactor[x];
+                double CExample = -exampleCFactor[x];
+
+                //cerr << "CExample1 = " << CExample << endl;
+
+                ExcAssert(isfinite(CExample));
 
                 for (auto & p: neighbours.probs) {
-                    Cexample += pFactor * p * logf(pFactor * p * ZApprox);
+                    // Be robust to zero probabilities, even though we
+                    // shouldn't have them.
+                    if (p == 0.0)
+                        continue;
+
+                    double CNeighbour =  pFactor * p * (logZapprox + logpFactor + logf(p));
+                    if (!isfinite(CNeighbour)) {
+                        cerr << "cExample = " << CExample
+                             << "cNeighbour = " << CNeighbour
+                             << " pFactor = " << pFactor
+                             << " p = " << p
+                             << " logZapprox = " << logZapprox
+                             << " logpFactor = " << logpFactor
+                             << " logf(p) = " << logf(p)
+                             << endl;
+                    }
+                    CExample += CNeighbour;
                 }
 
-                Capprox += Cexample;
+                //cerr << "CExample2 = " << CExample << endl;
+
+                Capprox += CExample;
+
+                ExcAssert(isfinite(Capprox));
             }
         }
 
@@ -2224,6 +2270,8 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
 
         double cost2 = Capprox;
         if (calcC) {
+            cerr << "cost " << Capprox << endl;
+            ExcAssert(isfinite(Capprox));
             //cerr << "Cost approx " << Capprox << " real " << C << endl;
 
             last_cost = cost;

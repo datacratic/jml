@@ -50,7 +50,7 @@ def test_vectors_to_distances():
 
 
 
-test_vectors_to_distances()
+#test_vectors_to_distances()
 
 from optparse import OptionParser
 
@@ -87,8 +87,8 @@ def test_tsne():
     Plot.xticks([])
     Plot.yticks([])
     Plot.legend(loc='upper left', scatterpoints=1)
-    if options.show_graph:
-        Plot.show()
+    #if options.show_graph:
+    Plot.show()
 
 
 test_tsne()

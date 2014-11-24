@@ -25,6 +25,7 @@
 #include "jml/tsne/vantage_point_tree.h"
 #include "jml/arch/simd_vector.h"
 #include "jml/utils/pair_utils.h"
+#include <iomanip>
 
 using namespace ML;
 using namespace std;
@@ -36,6 +37,88 @@ X sqr(X x)
 {
     return x * x;
 }
+
+void calcRep(const QuadtreeNode & node,
+             int depth,
+             bool inside,
+             const ML::distribution<float> & y,
+             double * FrepZ,
+             double & exampleZ,
+             int & nodesTouched,
+             int nd,
+             bool exact,
+             const std::function<void (const QuadtreeNode & node,
+                                       double qCellZ, const std::vector<int> & poi)> & onNode,
+             const std::vector<int> & pointsOfInterest,
+             const std::function<const QCoord & (int)> & getPointCoord,
+             float minDistanceRatio);
+
+BOOST_AUTO_TEST_CASE( test_quadtree )
+{
+    ifstream stream("debug.txt");
+    int nx, nd;
+
+    stream >> nx >> nd;
+
+    cerr << "nx = " << nx << " nd = " << nd << endl;
+
+    QCoord y(nd);
+    for (unsigned i = 0;  i < nd;  ++i) {
+        stream >> y[i];
+    }
+    
+    QCoord mins(nd, INFINITY), maxs(nd, -INFINITY);
+    vector<QCoord> inTree(nx, QCoord(nd));
+
+    for (unsigned x = 0;  x < nx;  ++x) {
+        for (unsigned i = 0;  i < nd;  ++i) {
+            stream >> inTree[x][i];
+            mins[i] = std::min(mins[i], inTree[x][i]);
+            maxs[i] = std::max(maxs[i], inTree[x][i]);
+        }
+    }
+
+    for (float & c: maxs) {
+        c = nextafterf(c, (float)INFINITY);
+    }
+
+    Quadtree qtree(mins, maxs);
+
+    for (unsigned x = 0;  x < nx;  ++x) {
+        qtree.root->insert(inTree[x]);
+    }    
+    
+    BOOST_CHECK_GE(qtree.root->finish(), nx);
+
+    std::set<int> pointsDone;
+
+    std::function<void (const QuadtreeNode & node) > onNode
+        = [&] (const QuadtreeNode & node, const std::vector<int> & pointsInside)
+        {
+            if (node.type == QuadtreeNode::TERMINAL) {
+                for (int p: pointsInside)
+                    ExcAssert(pointsDone.insert(p).second);
+            }
+
+            std::vector<int> quadrantPoints[1 << nd];
+            for (int p: pointsInside) {
+                int quad = node.quadrant(getPointCoord(p));
+                quadrantPoints[quad].push_back(p);
+            }
+
+            if (node.quadrants[i])
+                calc(*node.quadrants[i], depth + 1, i == quad, quadrantPoints[i]);
+            else
+                ExcAssert(quadrantPoints[i].empty());
+        };
+    
+    std::vector<int> points(nx);
+    for (unsigned i = 0;  i < nx;  ++i)
+        points[i] = i;
+
+    onNode(*qtree.root, points);
+}
+
 
 #if 0
 
@@ -361,10 +444,10 @@ BOOST_AUTO_TEST_CASE( test_vantage_point_tree )
     cerr << "did neighbour search in " << timer.elapsed() << endl;
     cerr << "numCalls = " << numCalls << endl;
 
-    cerr << timer.elapsed();
+    cerr << timer.elapsed() << endl;
 }
 
-#if 0
+#if 1
 BOOST_AUTO_TEST_CASE( test_small_approx )
 {
     string input_file = Environment::instance()["JML_TOP"]
@@ -390,6 +473,7 @@ BOOST_AUTO_TEST_CASE( test_small_approx )
     }
     cerr << "done." << endl;
 
+#if 0
     cerr << "converting to distances...";
     boost::multi_array<float, 2> distances
         = vectors_to_distances(data);
@@ -401,12 +485,21 @@ BOOST_AUTO_TEST_CASE( test_small_approx )
                                      1e-5 /* tolerance */,
                                      20.0 /* perplexity */);
     cerr << "done." << endl;
+#endif
+    
+    std::unique_ptr<VantagePointTree> vpTree;
+    std::unique_ptr<Quadtree> qtree;
 
-    boost::multi_array<float, 2> reduction JML_UNUSED
-        = tsneApprox(probabilities, 2);
-
+    boost::multi_array<float, 2> reduction
+        = tsneApproxFromCoords(data, 2, TSNE_Params(),
+                               TSNE_Callback(), &vpTree, &qtree);
+    
     cerr << "done approx t-SNE" << endl;
 
+    BOOST_REQUIRE(vpTree);
+    BOOST_REQUIRE(qtree);
+
+#if 0
     // Now try to rerun t-SNE on a point that is identical to one of the others
     distribution<float> probs(nx - 1);
     for (unsigned i = 1;  i < nx;  ++i)
@@ -419,8 +512,14 @@ BOOST_AUTO_TEST_CASE( test_small_approx )
             reduction2[i - 1][j] = reduction[i][j];
         }
     }
+#endif
 
-    cerr << "probs = " << probs << endl;
+    // Now try to rerun t-SNE on a point that is identical to one of the others
+    distribution<float> coords(nd);
+    for (unsigned i = 1;  i < nd;  ++i)
+        coords[i] = data[0][i];
+
+    cerr << "coords = " << coords << endl;
 
     distribution<float> real(2);
     for (unsigned i = 0;  i < 2;  ++i)
@@ -428,8 +527,9 @@ BOOST_AUTO_TEST_CASE( test_small_approx )
 
     cerr << "real = " << real << endl;
 
-    auto res = retsne(probs, reduction2);
-
+    auto res = retsneApproxFromCoords(coords, data, reduction, *qtree, *vpTree,
+                                      TSNE_Params());
+    
     cerr << "res = " << res << endl;
 }
 #endif

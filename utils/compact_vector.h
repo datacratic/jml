@@ -378,13 +378,13 @@ public:
         return begin() + firstindex;
     }
 
-    Data & operator [] (Size index)
+    JML_ALWAYS_INLINE Data & operator [] (Size index)
     {
         if (Safe) check_index(index);
         return data()[index];
     }
 
-    const Data & operator [] (Size index) const
+    JML_ALWAYS_INLINE const Data & operator [] (Size index) const
     {
         if (Safe) check_index(index);
         return data()[index];
