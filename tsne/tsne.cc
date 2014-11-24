@@ -31,6 +31,7 @@
 #include "jml/utils/environment.h"
 #include "quadtree.h"
 #include "vantage_point_tree.h"
+#include <fstream>
 
 using namespace std;
 
@@ -1235,23 +1236,65 @@ float pythag_dist(const float * d1, const float * d2, int nd)
     return sqrtf(SIMD::vec_dotprod_dp(diff, diff, nd));
 }
 
+#if 0
+    // (x - y)^2 = x^2 + y^2 - 2 x y
+
+    // Distance between neighbours.  Must satisfy the triangle inequality,
+    // so the sqrt is important.
+    auto dist1 = [&] (int x1, int x2)
+        {
+            return pythag_dist(&coords[x1][0], &coords[x2][0], nd);
+        };
+
+    float sum_dist[nx];
+    for (unsigned i = 0;  i < nx;  ++i) {
+        sum_dist[i] = SIMD::vec_dotprod_dp(&coords[i][0], &coords[i][0], nd);
+    }
+
+    // Distance between neighbours.  Must satisfy the triangle inequality,
+    // so the sqrt is important.
+    auto dist2 = [&] (int x1, int x2)
+        {
+            if (x1 == x2)
+                return 0.0f;
+            return sqrtf(sum_dist[x1] + sum_dist[x2]
+                         -2.0f * SIMD::vec_dotprod_dp(&coords[x1][0], &coords[x2][0], nd));
+        };
+
+    auto dist = [&] (int x1, int x2)
+        {
+            if (x2 < x1)
+                std::swap(x1, x2);
+
+            //float d1 = dist1(x1, x2);
+            float d2 = dist2(x1, x2);
+
+            //if (d1 != d2)
+            //    cerr << "d1 = " << d1 << " d2 = " << d2 << endl;
+            return d2;
+        };    
+
+    for (unsigned i = 0;  i < nd;  ++i)
+        if (!isfinite(newExampleCoords[i]))
+            throw ML::Exception("non-finite coordinates to sparseProbsFromCoords");
+
+    // Distance between neighbours.  Must satisfy the triangle inequality,
+    // so the sqrt is important.
+    auto dist = [&] (int x2)
+        {
+            return pythag_dist(&newExampleCoords[0], &coords[x2][0], nd);
+        };
+
+#endif
+
 std::vector<TsneSparseProbs>
-sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
+sparseProbsFromCoords(const std::function<float (int, int)> & dist,
+                      int nx,
                       int numNeighbours,
                       double perplexity,
                       double tolerance,
                       std::unique_ptr<VantagePointTree> * treeOut)
 {
-    int nx = coords.shape()[0];
-    int nd = coords.shape()[1];
-
-    // Distance between neighbours.  Must satisfy the triangle inequality,
-    // so the sqrt is important.
-    auto dist = [&] (int x1, int x2)
-        {
-            return pythag_dist(&coords[x1][0], &coords[x2][0], nd);
-        };
-
     std::vector<int> examples;
     for (unsigned i = 0;  i < nx;  ++i)
         examples.push_back(i);
@@ -1262,11 +1305,21 @@ sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
     // For each one, find the numNeighbours nearest neighbours
     std::vector<TsneSparseProbs> neighbours(nx);
 
+    ML::Timer timer;
+
     auto calcExample = [&] (int x)
         {
+            auto exDist = [&] (int x2)
+            {
+                return dist(x, x2);
+            };
+
             neighbours[x]
-                = sparseProbsFromCoords(coords, &coords[x][0], *tree, numNeighbours,
+                = sparseProbsFromCoords(exDist, *tree, numNeighbours,
                                         perplexity, tolerance, x /* to remove */);
+
+            if (x && x % 10000 == 0)
+                cerr << "done " << x << " in " << timer.elapsed() << "s" << endl;
         };
 
     run_in_parallel_blocked(0, nx, calcExample);
@@ -1278,28 +1331,34 @@ sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
 }
 
 TsneSparseProbs
-sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
-                      const float * newExampleCoords,
+sparseProbsFromCoords(const std::function<float (int)> & dist,
                       const VantagePointTree & tree,
                       int numNeighbours,
                       double perplexity,
                       double tolerance,
                       int toRemove)
 {
-    int nd = coords.shape()[1];
-
-    // Distance between neighbours.  Must satisfy the triangle inequality,
-    // so the sqrt is important.
-    auto dist = [&] (int x2)
-        {
-            return pythag_dist(&newExampleCoords[0], &coords[x2][0], nd);
-        };
-
     TsneSparseProbs result;
 
     // Find the nearest neighbours
     std::vector<std::pair<float, int> > exNeighbours
         = tree.search(dist, numNeighbours, INFINITY);
+
+#if 0
+    if (exNeighbours.empty()) {
+        cerr << "no neighbours" << endl;
+        cerr << "nx = " << coords.shape()[0];
+        cerr << "nd = " << nd << endl;
+
+        for (unsigned i = 0;  i < nd;  ++i) {
+            cerr << " " << newExampleCoords[i] << endl;
+        }
+
+        for (unsigned i = 0;  i < 10;  ++i) {
+            cerr << "dist with " << i << " is " << dist(i) << endl;
+        }
+    }
+#endif
 
     // Remove the closest one if asked (this is needed when this example itself is
     // in the tree
@@ -1318,12 +1377,17 @@ sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
             static std::mutex mutex;
             std::unique_lock<std::mutex> guard(mutex);
 
-            for (unsigned i = 0;  i < nd;  ++i)
-                cerr << "incoords[" << i << "] = "
-                     << coords[0][i] << endl;
-            for (unsigned i = 0;  i < nd;  ++i)
-                cerr << "coords[" << i << "] = "
-                     << newExampleCoords[i] << endl;
+            cerr << "toRemove = " << toRemove << endl;
+            cerr << "dist = " << dist(toRemove) << endl;
+            cerr << "distfirst = " << dist(exNeighbours[0].second) << endl;
+            cerr << "distsecond = " << dist(exNeighbours[1].second) << endl;
+
+            //for (unsigned i = 0;  i < nd;  ++i)
+            //    cerr << "incoords[" << i << "] = "
+            //         << coords[0][i] << endl;
+            //for (unsigned i = 0;  i < nd;  ++i)
+            //    cerr << "coords[" << i << "] = "
+            //         << newExampleCoords[i] << endl;
             for (unsigned i = 0;  i < exNeighbours.size();  ++i) {
                 cerr << "  " << i << " neighbour " << exNeighbours[i].second
                      << " dist " << exNeighbours[i].first << endl;
@@ -1369,6 +1433,9 @@ symmetrize(const std::vector<TsneSparseProbs> & input)
     for (unsigned j = 0;  j < input.size();  ++j) {
         const TsneSparseProbs & p = input[j];
         for (unsigned i = 0;  i < p.indexes.size();  ++i) {
+            // Check the input (we can't be our own neighbour)
+            ExcAssertNotEqual(p.indexes[i], j);
+
             // +1 is to avoid inserting 0 into a lightweight hash
             probs[p.indexes[i]][j + 1] += p.probs[i];
             probs[j][p.indexes[i] + 1] += p.probs[i];
@@ -1384,6 +1451,8 @@ symmetrize(const std::vector<TsneSparseProbs> & input)
         std::sort(sorted.begin(), sorted.end());
 
         for (auto & s: sorted) {
+            // Check that we haven't somehow become our own neighbour
+            ExcAssertNotEqual(s.first - 1, j);
             result[j].indexes.push_back(s.first - 1);
             result[j].probs.push_back(s.second / (2.0 * input.size()));
         }
@@ -1400,8 +1469,10 @@ tsneApproxFromCoords(const boost::multi_array<float, 2> & coords,
                      std::unique_ptr<VantagePointTree> * treeOut,
                      std::unique_ptr<Quadtree> * qtreeOut)
 {
+    PythagDistFromCoords dist(coords);
+
     std::vector<TsneSparseProbs> neighbours
-        = sparseProbsFromCoords(coords, params.numNeighbours,
+        = sparseProbsFromCoords(dist, dist.nx, params.numNeighbours,
                                 params.perplexity, params.tolerance, treeOut);
 
     std::vector<TsneSparseProbs> symmetricNeighbours
@@ -1411,6 +1482,28 @@ tsneApproxFromCoords(const boost::multi_array<float, 2> & coords,
         = tsneApproxFromSparse(symmetricNeighbours, num_dims, params, callback, qtreeOut);
     
     return embedding;
+}
+
+PythagDistFromCoords::
+PythagDistFromCoords(const boost::multi_array<float, 2> & coords)
+    : coords(coords), sum_dist(coords.shape()[0]),
+      nx(coords.shape()[0]), nd(coords.shape()[1])
+{
+    for (unsigned i = 0;  i < nx;  ++i) {
+        sum_dist[i] = SIMD::vec_dotprod_dp(&coords[i][0], &coords[i][0], nd);
+    }
+}
+
+float
+PythagDistFromCoords::
+operator () (int x1, int x2) const
+{
+    if (x1 == x2)
+        return 0.0f;
+    if (x2 < x1)
+        std::swap(x1, x2);
+    return sqrtf(sum_dist[x1] + sum_dist[x2]
+                 -2.0f * SIMD::vec_dotprod_dp(&coords[x1][0], &coords[x2][0], nd));
 }
 
 
@@ -1484,6 +1577,8 @@ struct CalcRepContext {
             || (node.diag < minDistanceRatio * sqrtf(distSq) && !exact)) {
 
             float qCellZ = 1.0f / (1.0f + distSq);
+
+#if 0
             if (distSq == 0.0) {
                 cerr << "DISTANCE OF ZERO" << endl;
                 cerr << "effectiveNumChildren = "
@@ -1497,7 +1592,7 @@ struct CalcRepContext {
                 cerr << "node.child = " << node.child << endl;
                 cerr << "point = " << y << endl;
             }
-
+#endif
 
             exampleZ += effectiveNumChildren * qCellZ;
 
@@ -1517,16 +1612,31 @@ struct CalcRepContext {
         if (!pointsInside.empty()) {
             std::vector<int> quadrantPoints[1 << nd];
             for (int p: pointsInside) {
-                int quad = node.quadrant(getPointCoord(p));
-                quadrantPoints[quad].push_back(p);
+                QCoord coord = getPointCoord(p);
+                int quad = node.quadrant(coord);
+                ExcAssert(node.quadrants[quad]);
+
+                if (!node.quadrants[quad]) {
+                    // Won't be recursed.  Handle here
+                    cerr << "not recursed; coord = " << coord << " child" << node.child
+                         << endl;
+                    float qCellZ = 1.0f / (1.0f + distSq);
+                    onNode(node, qCellZ, {p});
+                }
+                else {
+                    quadrantPoints[quad].push_back(p);
+                }
             }
 
             int quad = -1;
             if (inside)
                 quad = node.quadrant(y);
-            for (unsigned i = 0;  i < (1 << nd);  ++i)
+            for (unsigned i = 0;  i < (1 << nd);  ++i) {
                 if (node.quadrants[i])
                     calc(*node.quadrants[i], depth + 1, i == quad, quadrantPoints[i]);
+                else
+                    ExcAssert(quadrantPoints[i].empty());
+            }
         }
         else {
             int quad = -1;
@@ -1642,47 +1752,55 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
 
     //cerr << "sump0 = " << exampleNeighbours[0].probs.total() * pFactor << endl;
     //cerr << "sump1 = " << exampleNeighbours[1].probs.total() * pFactor << endl;
+
+    std::unique_ptr<Quadtree> qtreePtr;
+
+    auto updateQtree = [&] () -> Quadtree &
+        {
+            // Find the bounding box for the quadtree
+            ML::distribution<float> mins(nd), maxs(nd);
+
+            for (unsigned j = 0;  j < nx;  ++j) {
+                ML::distribution<float> y(nd);
+                for (unsigned i = 0;  i < nd;  ++i)
+                    y[i] = Y[j][i];
+            
+                if (j == 0)
+                    mins = maxs = y;
+                else {
+                    y.min_max(mins, maxs);
+                }
+            }
+
+            // Create the quadtree for this iteration
+            QCoord minc(mins.begin(), mins.end()), maxc(maxs.begin(), maxs.end());
+
+            // Bounding boxes are open ended on the max side, so move to the next float
+            for (float & c: maxc) {
+                c = nextafterf(c, (float)INFINITY);
+            }
+
+            qtreePtr.reset(new Quadtree(minc, maxc));
+            Quadtree & qtree = *qtreePtr;
+
+            // Insert the values into the quadtree
+            for (unsigned i = 0;  i < nx;  ++i) {
+                QCoord coord(nd);
+                for (unsigned j = 0;  j < nd;  ++j) {
+                    coord[j] = Y[i][j];
+                }
+
+                qtree.insert(coord);
+            }
+        
+            int numNodes JML_UNUSED = qtree.root->finish();
+
+            return qtree;
+        };
     
     for (int iter = 0;  iter < params.max_iter;  ++iter) {
 
         //cerr << "iter " << iter << endl;
-
-        // Find the bounding box for the quadtree
-        ML::distribution<float> mins(nd), maxs(nd);
-
-        for (unsigned j = 0;  j < nx;  ++j) {
-            ML::distribution<float> y(nd);
-            for (unsigned i = 0;  i < nd;  ++i)
-                y[i] = Y[j][i];
-            
-            if (j == 0)
-                mins = maxs = y;
-            else {
-                y.min_max(mins, maxs);
-            }
-        }
-
-        // Create the quadtree for this iteration
-        QCoord minc(mins.begin(), mins.end()), maxc(maxs.begin(), maxs.end());
-
-        // Bounding boxes are open ended on the max side, so move to the next float
-        for (float & c: maxc) {
-            c = nextafterf(c, (float)INFINITY);
-        }
-
-        Quadtree qtree(minc, maxc);
-
-        // Insert the values into the quadtree
-        for (unsigned i = 0;  i < nx;  ++i) {
-            QCoord coord(nd);
-            for (unsigned j = 0;  j < nd;  ++j) {
-                coord[j] = Y[i][j];
-            }
-
-            qtree.insert(coord);
-        }
-        
-        int numNodes JML_UNUSED = qtree.root->finish();
 
         //cerr << "points are in " << numNodes << " nodes" << endl;
 
@@ -1692,6 +1810,8 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
         for (unsigned i = 0;  i < nx;  ++i) {
             pointCoords[i] = QCoord(&Y[i][0], &Y[i][0] + nd);
         }
+
+        Quadtree & qtree = updateQtree();
 
         // This accumulates the sum_j p[x][j] log Z*q[x][j] for each example.  From this and
         // Z, we can calculate the cost of each example.  Only relevant if calcC is true.
@@ -1788,6 +1908,8 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
 
                     // Note that sum_j p[j] log (Zq[j])
                     //         = sum_j p[j] log Z + sum_j p[j] log q[j]
+                    if (pointsOfInterest.empty())
+                        return;
 
                     double logqCellZ = log(qCellZ);
                     for (unsigned p: pointsOfInterest) {
@@ -1834,7 +1956,7 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
             };
 
 #if 1
-        int totalThreads = std::min(16, num_threads() / 2);
+        int totalThreads = std::max(1, std::min(16, num_threads() / 2));
 
         auto doThread = [&] (int n)
             {
@@ -1869,10 +1991,15 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
                                          ZApproxValues.end(),
                                          0.0);
 
-        double Zrecip = 1.0 / ZApprox;
+        ExcAssert(isfinite(ZApprox));
+        ExcAssertNotEqual(0.0, ZApprox);
 
+        double Zrecip = 1.0 / ZApprox;
+        ExcAssert(isfinite(Zrecip));
+        
         for (unsigned x = 0;  x < nx;  ++x) {
             for (unsigned i = 0;  i < nd;  ++i) {
+                ExcAssert(isfinite(FrepZ[x][i]));
                 FrepApprox[x][i] = FrepZ[x][i] * Zrecip;
             }
         }
@@ -2036,6 +2163,10 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
                 //dY[x][i] = 4.0 * (Fattr[x][i] + FrepApprox[x][i]);
                 dY[x][i] = 4.0 * (FattrApprox[x][i] + FrepApprox[x][i]);
 
+                ExcAssert(isfinite(FattrApprox[x][i]));
+                ExcAssert(isfinite(FrepApprox[x][i]));
+                ExcAssert(isfinite(dY[x][i]));
+
                 maxAbsDy = std::max(maxAbsDy, fabs(dY[x][i]));
                 maxAbsY = std::max(maxAbsY, Y[x][i]);
 
@@ -2088,7 +2219,7 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
                 }
         }
 
-        return Y;
+        break;
 #endif
 
         double cost2 = Capprox;
@@ -2115,7 +2246,8 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
                     params.min_gain);
 
         if (callback
-            && !callback(iter, cost, "update")) return Y;
+            && !callback(iter, cost, "update"))
+            break;
 
 
         /*********************************************************************/
@@ -2124,7 +2256,7 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
         recenter_about_origin(Y);
 
         if (callback
-            && !callback(iter, cost, "recenter")) return Y;
+            && !callback(iter, cost, "recenter")) break;
 
         if ((iter + 1) % 100 == 0 || iter == params.max_iter - 1) {
             cerr << format("iteration %4d cost %6.3f  ",
@@ -2159,7 +2291,7 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
         //     << " maxCoordChange = " << maxCoordChange << endl;
 
         if (maxCoordChange < params.max_coord_change && iter > params.min_iter)
-            return Y;
+            break;
             
         // Stop lying about P values if we're finished 100 iterations
         if (iter == 100) {
@@ -2167,169 +2299,92 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
         }
     }
 
+    if (qtreeOut) {
+        updateQtree();
+        qtreeOut->reset(qtreePtr.release());
+    }
+
     return Y;
 }
 
 ML::distribution<float>
-retsne(const ML::distribution<float> & probs_,
-       const boost::multi_array<float, 2> & prevOutput,
-       const TSNE_Params & params)
+retsneApproxFromCoords(const ML::distribution<float> & newExampleCoords,
+                       const boost::multi_array<float, 2> & coreCoords,
+                       const boost::multi_array<float, 2> & prevOutput,
+                       const Quadtree & qtree,
+                       const VantagePointTree & vpTree,
+                       const TSNE_Params & params)
 {
-    int nx = prevOutput.shape()[0];
+    int nd = coreCoords.shape()[1];
+
+    // Distance between neighbours.  Must satisfy the triangle inequality,
+    // so the sqrt is important.
+    auto dist = [&] (int x2)
+        {
+            return pythag_dist(&newExampleCoords[0], &coreCoords[x2][0], nd);
+        };
+
+    TsneSparseProbs neighbours
+        = sparseProbsFromCoords(dist, vpTree,
+                                params.numNeighbours,
+                                params.perplexity,
+                                params.tolerance,
+                                -1 /* don't remove any */);
+    
+    // TODO: do the equivalent of making the probabilities symmetric
+    
+    return retsneApproxFromSparse(neighbours, prevOutput, qtree, params);
+}
+
+ML::distribution<float>
+retsneApproxFromSparse(const TsneSparseProbs & neighbours,
+                       const boost::multi_array<float, 2> & prevOutput,
+                       const Quadtree & qtree,
+                       const TSNE_Params & params)
+{
+    int nx JML_UNUSED = prevOutput.shape()[0];
     int nd = prevOutput.shape()[1];
+    int nn = neighbours.indexes.size();
 
-    ML::distribution<float> mins(nd), maxs(nd);
-    std::vector<ML::distribution<float> > Y(nx, ML::distribution<float>(nd));
+    ExcAssert(qtree.root);
 
-    for (unsigned i = 0;  i < nx;  ++i) {
-        for (unsigned j = 0;  j < nd;  ++j) {
-            Y[i][j] = prevOutput[i][j];
-        }
-        if (i == 0)
-            mins = maxs = Y[i];
-        else {
-            Y[i].min_max(mins, maxs);
-        }
-        //cerr << "input " << i << " is " << Y[i] << " with prob " << probs[i] << endl;
+    // Extract the coordinate for each neighbour into a dense array
+    std::vector<QCoord> neighbourCoords(nn);
+
+    for (unsigned i = 0;  i < nn;  ++i) {
+        neighbourCoords[i] = QCoord(&prevOutput[neighbours.indexes[i]][0], &prevOutput[neighbours.indexes[i]][0] + nd);
     }
 
-    QCoord minc(mins.begin(), mins.end()), maxc(maxs.begin(), maxs.end());
-
-    // Bounding boxes are open ended on the max side, so move to the next float
-    for (float & c: maxc) {
-        c = nextafterf(c, (float)INFINITY);
-    }
-
-    Quadtree qtree(minc, maxc);
-
-    for (unsigned i = 0;  i < nx;  ++i) {
-        QCoord coord(nd);
-        for (unsigned j = 0;  j < nd;  ++j) {
-            coord[j] = prevOutput[i][j];
-        }
-
-        qtree.insert(coord);
-    }
-
-    int numNodes = qtree.root->finish(0);
-
-    //cerr << "quadtree had " << numNodes << " nodes for " << qtree.root->numChildren
-    //     << " children" << endl;
-
-    ExcAssertEqual(qtree.root->numChildren, nx);
-
-    distribution<float> probs = probs_;
-
-    //cerr << "input perplexity is " << perplexity(probs_) << endl;
-    //cerr << "input probs total " << probs_.total() << " min " << probs.min()
-    //     << " max " << probs.max() << endl;
-
-    // 1.  Calculate the probabilities.  We can start at the origin
-
-    //cerr << "nd = " << nd << " nx = " << nx << endl;
-
-
-    probs.normalize();
-
-    std::vector<std::pair<float, int> > probsSorted;
-    for (unsigned i = 0;  i < probs.size();  ++i) {
-        probsSorted.emplace_back(probs[i], i);
-    }
-
-    std::sort(probsSorted.begin(), probsSorted.end());
-    std::reverse(probsSorted.begin(), probsSorted.end());
-
-    //cerr << "probsSorted = " << probsSorted << endl;
-
-    double probsTotal = 0.0;
-    int numNeeded = -1;
-    for (unsigned i = 0;  i < probsSorted.size();  ++i) {
-        probsTotal += probsSorted[i].first;
-        if (probsTotal > 0.99) {
-            numNeeded = i;
-            break;
-        }
-    }
+    ML::distribution<float> y(nd);
 
     // Start off at the Y of the point with the highest probability, to get faster
     // convergance
-    ML::distribution<float> y(nd);
-
-    y = Y[probsSorted[0].second];
-
-    // Restricted subset of neighbours used to approximate attractive
-    // force.
-    vector<int> neighbours;
-    ML::distribution<float> neighbourProbs;
-    for (unsigned i = 0;  i < numNeeded && i < 60;  ++i) {
-        neighbours.push_back(probsSorted[i].second);
-        neighbourProbs.push_back(probsSorted[i].first);
+    double highestProb = -INFINITY;
+    int bestNeighbour = -1;
+    for (unsigned i = 0;  i < nn;  ++i) {
+        if (neighbours.probs[i] > highestProb) {
+            highestProb = neighbours.probs[i];
+            bestNeighbour = i;
+        }
     }
 
-    neighbourProbs.normalize();
-
-    // Now for each node, figure out which of the neighbour points are there
-    
-    std::vector<ML::compact_vector<int, 3> > nodeNeighbours(numNodes);
-
-    // Create a new coordinate for each neighbour
-    std::vector<QCoord> neighbourCoords(neighbours.size());
-
-    for (unsigned i = 0;  i < neighbours.size();  ++i) {
-        neighbourCoords[i] = QCoord(&Y[neighbours[i]][0], &Y[neighbours[i]][0] + nd);
+    // Copy the coordinates in
+    for (unsigned i = 0;  i < nd;  ++i) {
+        y[i] = prevOutput[bestNeighbour][i];
     }
 
-#if 0
-    // Now traverse the quadtree, splitting up the list of neighbours so that we
-    // have a list of them at each node
-    std::function<void (QuadtreeNode & node, const std::vector<int> &) > distributeNeighbours
-        = [&] (QuadtreeNode & node,
-               const std::vector<int> & neighbours)
-        {
-            nodeNeighbours[node.nodeNumber].insert
-                (nodeNeighbours[node.nodeNumber].begin(),
-                 neighbours.begin(), neighbours.end());
-            
-            if (node.type == QuadtreeNode::TERMINAL) {
-                ExcAssertEqual(neighbours.size(), 1);
-                ExcAssertEqual(neighbourCoords[neighbours[0]],
-                               node.centerOfMass);
-            }
-            else {
-                std::map<int, std::vector<int> > quadrants;
+    //cerr << "y = " << y << endl;
+    //cerr << "total P = " << neighbours.probs.total() << endl;
+    //cerr << "max P = " << neighbours.probs.max() << endl;
 
-                for (auto & n: neighbours) {
-                    quadrants[node.quadrant(node.center, neighbourCoords[n])].push_back(n);
-                }
-                
-                for (unsigned i = 0;  i < (1 << nd);  ++i) {
-                    if (!quadrants[i])
-                    ExcAssert(node.quadrants[i]);
-                    auto it = node.quadrants.find(q.first);
-                    ExcAssert(it != node.quadrants.end());
-                    distributeNeighbours(*it->second, q.second);
-                }
-            }
-        };
-
-    // Distribute all neighbours across the quadtree
-    vector<int> iota;
-    for (unsigned i = 0;  i < neighbours.size();  ++i)
-        iota.push_back(i);
-
-    distributeNeighbours(*qtree.root, iota);
-#endif
-
-    //cerr << "done distributing" << endl;
-
-    //y = {0.0, 0.0};
-    //y = { -95.387, -55.4707 };
+    float pFactor = 1.0;// / nx;
 
     double lastC = INFINITY;
 
-    float D[nx], Q[nx];
+    // Do we force the repulsive force to calculate the exact value?
+    bool exact = false;
 
-    for (unsigned iter = 0;  iter < 1000;  ++iter) {
+    for (unsigned iter = 0;  iter < params.max_iter;  ++iter) {
 
         // Y gradients
         double dy[nd];
@@ -2341,86 +2396,101 @@ retsne(const ML::distribution<float> & probs_,
 
         // Approximate solution to the repulsive force
         bool calcC = iter % 20 == 0;
+        //calcC = true;
         double C = 0.0;
 
         double ZApprox = 0.0;
         double FrepZApprox[nd];
         std::fill(FrepZApprox, FrepZApprox + nd, 0.0);
 
-        ML::distribution<float> com(nd);
+        int poiDone = 0;
+        int nodesTouched = 0;
 
-        float logqZ[neighbours.size()];
-        std::fill(logqZ, logqZ + neighbours.size(), std::numeric_limits<float>::quiet_NaN());
+        double CFactor = 0.0;
 
-        auto onNode = [&] (const QuadtreeNode & node, int depth)
+        //std::set<int> poiDoneSet;
+
+        auto onNode = [&] (const QuadtreeNode & node,
+                           double qCellZ,
+                           const std::vector<int> & pointsOfInterest)
             {
-                double dist;
+                if (pointsOfInterest.empty())
+                    return;
                 
-                if (nd == 2) {
-                    float ncr = 1.0 / node.numChildren;
-                    com[0] = (node.centerOfMass[0] * ncr) - y[0];
-                    com[1] = (node.centerOfMass[1] * ncr) - y[1];
-                    dist = sqrt(com[0] * com[0] + com[1] * com[1]);
-                }
-                else {
+                // If we want to calculate C, we store the log of
+                // the cell's Q * Z for each point of interest so that
+                // we can calculate the cost later.
 
-                    // 1.  Calculate the distance between this y point and the
-                    //     node center
-                    std::copy(node.centerOfMass.begin(),
-                              node.centerOfMass.end(),
-                              com.begin());
+                // Note that sum_j p[j] log (Zq[j])
+                //         = sum_j p[j] log Z + sum_j p[j] log q[j]
 
-                    // Normalized by number of children
-                    com *= 1.0 / node.numChildren;
-
-                    // Turn into a distance from y
-                    com -= y;
-
-                    dist = com.two_norm();
+                double logqCellZ = log(qCellZ);
+                for (unsigned p: pointsOfInterest) {
+                    CFactor += pFactor * neighbours.probs[p] * logqCellZ;
                 }
 
-                double diag = node.diagonalLength();
-                double ratio = diag / dist;
-
-                //cerr << "dist = " << dist << " diag = " << diag
-                //     << " ratio = " << ratio << endl;
-
-                if (node.numChildren == 1 || ratio < 0.4) {
-                    // Stop here
-
-                    //if (node.numChildren > 1)
-                    //    cerr << "early stop with " << node.numChildren
-                    //         << " children" << endl;
-
-                    double qCellZ = node.numChildren / (1.0 + dist * dist);
-
-                    ZApprox += qCellZ;
-
-                    for (unsigned i = 0;  i < nd;  ++i) {
-                        FrepZApprox[i] += com[i] * qCellZ * qCellZ;
-                    }
-
-#if 0
-                    // If we want to calculate C, we store the log of
-                    // the cell's Q * Z for each point of interest so that
-                    // we can calculate the cost later.
-                    if (calcC) {
-                        auto & neighbours = nodeNeighbours[node.nodeNumber];
-                        if (!neighbours.empty()) {
-                            float logqCellZ = logf(qCellZ);
-                            for (int neighbour: neighbours) {
-                                logqZ[neighbour] = logqCellZ;
-                            }
-                        }
-                    }
-                    return false;
-#endif
-                }
-
-                return true;  // continue recursing
+                poiDone += pointsOfInterest.size();
+                //poiDoneSet.insert(pointsOfInterest.begin(), pointsOfInterest.end());
             };
 
-        qtree.root->walk(onNode);
+        auto getPointCoord = [&] (int point) -> const QCoord &
+            {
+                return neighbourCoords.at(point);
+            };
+
+        if (calcC) {
+            // Bring along the points of interest for the ride, since we need to
+            // calculate a log QZ score for each
+            vector<int> pointsOfInterest;
+            pointsOfInterest.reserve(neighbours.indexes.size());
+            for (unsigned i = 0;  i < neighbours.indexes.size();  ++i)
+                pointsOfInterest.push_back(i);
+
+            calcRep(*qtree.root, 0, false /* inside */,
+                    y, FrepZApprox, ZApprox, nodesTouched, nd, exact,
+                    onNode, pointsOfInterest, getPointCoord,
+                    params.min_distance_ratio);
+
+#if 0
+            if (poiDone != neighbours.indexes.size()) {
+                for (unsigned i = 0;  i < neighbours.indexes.size();  ++i) {
+                    if (!poiDoneSet.count(i)) {
+                        cerr << "point " << i << " not done" << endl;
+
+                        static std::mutex mutex;
+                        std::unique_lock<std::mutex> guard(mutex);
+
+                        {
+                            std::ofstream stream("debug.txt");
+                            stream << nx << " " << nd << " " << i;
+                            for (unsigned i = 0;  i < nd;  ++i) {
+                                stream << ML::format(" %+.16g", y[i]);
+                            }
+                            stream << endl;
+                            for (unsigned x = 0;  x < nx;  ++x) {
+                                for (unsigned i = 0;  i < nd;  ++i) {
+                                    stream << ML::format("%+.16g ", prevOutput[x][i]);
+                                }
+                                stream << endl;
+                            }
+                        }
+                        abort();
+                    }
+                }
+            }
+
+#endif
+            ExcAssertEqual(poiDone, neighbours.indexes.size());
+
+            //if (!isfinite(exampleCFactor[x]))
+            //    cerr << "x = " << x << " factor " << exampleCFactor[x] << endl;
+            ExcAssert(isfinite(CFactor));
+        } else {
+            calcRep(*qtree.root, 0, false /* inside */,
+                    y, FrepZApprox, ZApprox, nodesTouched, nd, exact,
+                    nullptr, {}, nullptr, params.min_distance_ratio);
+        }
+
 
         double FrepApprox[nd];
         for (unsigned i = 0;  i < nd;  ++i) {
@@ -2430,89 +2500,50 @@ retsne(const ML::distribution<float> & probs_,
         double FattrApprox[nd];
         std::fill(FattrApprox, FattrApprox + nd, 0.0);
 
-        for (unsigned q = 0;  q < neighbours.size();  ++q) {
-            unsigned j = neighbours[q];
+        for (unsigned q = 0;  q < neighbours.indexes.size();  ++q) {
+            // Difference in each dimension
+            float d[nd];
 
+            // Square of total distance
             double D = 0.0;
             if (nd == 2) {
-                float d0 = y[0] - Y[j][0];
-                float d1 = y[1] - Y[j][1];
-                D = d0 * d0 + d1 * d1;
+                d[0] = y[0] - neighbourCoords[q][0];
+                d[1] = y[1] - neighbourCoords[q][1];
+                D = d[0] * d[0] + d[1] * d[1];
             } else {
                 for (unsigned i = 0;  i < nd;  ++i) {
-                    D += (y[i] - Y[j][i]) * (y[i] - Y[j][i]);
+                    d[i] = (y[i] - neighbourCoords[q][i]);
+                    D += d[i] * d[i];
                 }
             }
-
+            
             // Note that 1/(1 + D[j]) == Q[j] * Z
-            // See van der Marten, 2013 http://arxiv.org/pdf/1301.3342.pdf
-            // Barnes-Hut-SNE
 
-            float factorAttr = neighbourProbs[q] / (1.0f + D);
+            float factorAttr = pFactor * neighbours.probs[q] / (1.0f + D);
 
             if (nd == 2) {
-                float dYj0 = y[0] - Y[j][0];
-                float dYj1 = y[1] - Y[j][1];
-                FattrApprox[0] += dYj0 * factorAttr;
-                FattrApprox[1] += dYj1 * factorAttr;
+                FattrApprox[0] += d[0] * factorAttr;
+                FattrApprox[1] += d[1] * factorAttr;
             }
             else {
                 for (unsigned i = 0;  i < nd;  ++i) {
-                    double dYji = y[i] - Y[j][i];
-                    FattrApprox[i] += dYji * factorAttr;
+                    FattrApprox[i] += d[i] * factorAttr;
                 }
             }
-
-            //if (calcC) {
-            //    C += probs[j] * (log(probs[j]) - logQ(probs[j]));
-            //}
         }
 
         double Capprox = 0.0;
         if (calcC) {
-            float logZ = log(ZApprox);
-            for (unsigned q = 0;  q < neighbours.size();  ++q) {
-                // log (Z * qj) = logZ + log qj, so log qj = log (Z * qj) - log Z
+            //double logZ = log(ZApprox);
 
-                float logqj = logqZ[q] - logZ;
-                Capprox += neighbourProbs[q] * (logf(neighbourProbs[q]) - logqj);
+            // C = sum_j P[j] log P[j] - sum_j P[j] log q[j]
+            //      = sum_j P[j] log P[j] - sum_j P[j] log Zq[j] + sum_j P[j] log Z
+            //      = sum_j P[j] log Z P[j] - CFactor
+            Capprox = -CFactor;
+            
+            for (auto & p: neighbours.probs) {
+                Capprox += pFactor * p * logf(pFactor * p * ZApprox);
             }
-        }
-
-        if (calcC && false) {
-            double Z = 0.0;
-
-            // Square of pythagorean distances of this point from each other
-            // point in low dimensional space
-            for (unsigned j = 0;  j < nx;  ++j) {
-                D[j] = 0.0;
-                if (nd == 2) {
-                    float d0 = y[0] - Y[j][0];
-                    float d1 = y[1] - Y[j][1];
-                    D[j] = d0 * d0 + d1 * d1;
-                } else {
-                    for (unsigned i = 0;  i < nd;  ++i) {
-                        D[j] += (y[i] - Y[j][i]) * (y[i] - Y[j][i]);
-                    }
-                }
-
-                //auto dist = y - Y[j];
-                //D[j] = dist.dotprod(dist);
-                Q[j] = 1.0f / (1.0f + D[j]);
-                Z += Q[j];
-            }
-
-
-            for (unsigned j = 0;  j < nx;  ++j) {
-                Q[j] /= Z;
-            }
-
-            for (unsigned q = 0;  q < neighbours.size();  ++q) {
-                float p = neighbourProbs[q];
-                C += p * logf(p / Q[neighbours[q]]);
-            }
-
-            cerr << "C = " << C << " Capprox = " << Capprox << endl;
         }
 
         C = Capprox;
@@ -2525,11 +2556,8 @@ retsne(const ML::distribution<float> & probs_,
             dy[i] += FattrApprox[i];
         }
 
-        //dy *= 2.0;
+        //cerr << "C = " << C << " y = " << y << " dY = " << dy[0] << " " << dy[1] << endl;
 
-        //cerr << "iter " << iter << " C = " << C << " y = " << y
-        //     << " dY = " << dy << endl;
-            
         if (calcC) {
             if (fabs(C - lastC) < 0.00001) {
                 //cerr << "converged after " << iter << " iterations" << endl;
@@ -2539,7 +2567,7 @@ retsne(const ML::distribution<float> & probs_,
         }
 
         for (unsigned i = 0;  i < nd;  ++i)
-            y[i] -= 100.0 * dy[i];
+            y[i] -= 20.0 * dy[i];
 
         //y -= 100.0 * dy;
 

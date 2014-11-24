@@ -9,6 +9,7 @@
 
 #include "jml/utils/compact_vector.h"
 #include "jml/utils/exc_assert.h"
+#include <iostream>
 
 namespace ML {
 
@@ -25,8 +26,11 @@ struct QuadtreeNode {
         center.resize(mins.size());
         for (unsigned i = 0;  i < mins.size();  ++i) {
             center[i] = 0.5 * (mins[i] + maxs[i]);
+            ExcAssert(std::isfinite(mins[i]));
+            ExcAssert(std::isfinite(maxs[i]));
+            ExcAssert(std::isfinite(child[i]));
         }
-
+        
         ExcAssert(contains(child));
 
         diag = diagonalLength();
@@ -53,6 +57,8 @@ struct QuadtreeNode {
                 delete q;
     }
 
+    int numDimensions() const { return mins.size(); }
+
     QCoord mins;   ///< Minimum coordinates for bounding box
     QCoord maxs;   ///< Maximum coordinates for bounding box
     QCoord center; ///< Cached pre-computation of center of bounding box
@@ -75,6 +81,9 @@ struct QuadtreeNode {
     /** Insert the given point into the tree. */
     void insert(QCoord point, int depth = 0, int n = 1)
     {
+        for (unsigned i = 0;  i < point.size();  ++i)
+            ExcAssert(std::isfinite(point[i]));
+
         ExcAssertEqual(point.size(), mins.size());
 
         if (depth > 100) {
@@ -169,10 +178,13 @@ struct QuadtreeNode {
         recipNumChildren[0] = 1.0 / numChildren;
         recipNumChildren[1] = 1.0 / (numChildren - 1);
 
-        for (unsigned i = 0;  i < (1 << center.size());  ++i)
+        currentNodeNumber += 1;
+
+        for (unsigned i = 0;  i < (1 << center.size());  ++i) {
             if (quadrants[i])
                 currentNodeNumber
                     = quadrants[i]->finish(currentNodeNumber);
+        }
         
         return currentNodeNumber;
     }

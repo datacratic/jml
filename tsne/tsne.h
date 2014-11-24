@@ -18,6 +18,8 @@
 #include "jml/stats/distribution.h"
 #include <boost/multi_array.hpp>
 #include <boost/function.hpp>
+#include "vantage_point_tree.h"
+#include "quadtree.h"
 
 namespace ML {
 
@@ -199,24 +201,75 @@ tsneApproxFromCoords(const boost::multi_array<float, 2> & coords,
                      std::unique_ptr<VantagePointTree> * treeOut = nullptr,
                      std::unique_ptr<Quadtree> * qtreeOut = nullptr);
 
-/** Given a set of coordinates for each of nx elements, a number of nearest
-    neighbours and a perplexity score, calculate a sparse set of neighbour
-    probabilities with the given perplexity for each of the elements.
+/** Structure used to implement a distance function between coordinates
+    and two points defined by coordinates in an euclidian space.  It uses
+    a factorization to speed up the calculation, which is cached in the
+    object.
+*/
+struct PythagDistFromCoords {
 
-    The pythagorean distance is used as a metric to choose which are the
-    closest examples.
+    /** Construct the object.  This accepts a nx by nd matrix, and
+        for each x, calculates the square of the two-norm of the
+        vector itself.
+    */
+    PythagDistFromCoords(const boost::multi_array<float, 2> & coords);
+
+    const boost::multi_array<float, 2> & coords;
+    ML::distribution<float> sum_dist;
+    int nx;
+    int nd;
+
+    /** Distance between points.
+
+        Given two points x and y, whose coordinates are coords[x] and
+        coords[y], this will calculate the euclidian distance
+        ||x - y|| = sqrt(sum_i (x[i] - y[i])^2)
+                  = sqrt(sum_i (x[i]^2 + y[i]^2 - 2 x[i]y[i]) )
+                  = sqrt(sum_i x[i]^2 + sum_i y[i]^2 - 2 sum x[i]y[i])
+                  = sqrt(||x||^2 + ||y||^2 - 2 x . y)
+
+        Must satisfy the triangle inequality, so the sqrt is important.  We
+        also take pains to ensure that dist(x,y) === dist(y,x) *exactly*,
+        and that dist(x,x) == 0.
+    */
+    float operator () (int x1, int x2) const;
+};
+
+/** Given a function that can calculate a distance between any two of nx
+    points, a number of nearest neighbours and a perplexity score,
+    calculate a sparse set of neighbour probabilities with the given
+    perplexity for each of the elements.  This assumes that the points
+    are on a gaussian.
+
+    The points are first inserted into a vantage point tree to allow
+    efficient nearest neighbour lookup.
+
+    After that, for each point, the parameters of the gaussian that induce
+    the given perplexity are learnt, and then the probability distribution
+    is generated over the closest neighbours that uses the gaussian
+    learnt to induce probabilities.
 
     Input:
-    - coords: nx by nd matrix, with the nd coordinates for each of the nd
-      example.  These will be interpreted as coordinates in a nd dimensional
-      space, ie not as contingent probabilities but as coordinates.
-    - perplexity: value of perplexity to calculate.  The output
-      distribution for each of the nx examples will have this perplexity.
+    - dist: a function that can be applied to any two points, and will return
+      the distance between them.  It is exremely important that the following
+      characteristics hold:
+      1.  dist(x,x) == 0 to full numeric precision
+      2.  dist(y,x) == dist(x,y) to full numeric precision
+      3.  dist(x,z) <= dist(x,y) + dist(y,z) to full precision, ie the triangle
+          inequality holds.
+    - nx: the number of points.  Numbers from [0,nx) will be passed to the
+      distance function.
     - numNeighbours: number of neighbours to return for each of the
       examples.  This would typically be set at 3 * the perplexity to make
       sure that there are sufficiently distant examples for the chosen
       perplexity.
-    - tolerance: tolerance for the perplexity calculation
+    - perplexity: value of perplexity to calculate.  The output
+      distribution for each of the nx examples will have this perplexity.
+    - tolerance: the tolerance value for the perplexity calculation.  A binary
+      search algorithm is used; this affects the convergance characteristics.
+    - treeOut: if this is non-null, the vantage point tree constructed will
+      be put into the given unique_ptr for later re-use.
+
 
     Output:
     - A vector of nx entries, each of which contains numNeighbours pairs
@@ -228,11 +281,12 @@ tsneApproxFromCoords(const boost::multi_array<float, 2> & coords,
 */
 
 std::vector<TsneSparseProbs>
-sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
-                      int numNeighbours,
-                      double perplexity,
-                      double tolerance = 1e-5,
-                      std::unique_ptr<VantagePointTree> * treeOut = nullptr);
+sparseProbsFromDist(const std::function<float (int, int)> & dist,
+                    int nx,
+                    int numNeighbours,
+                    double perplexity,
+                    double tolerance = 1e-5,
+                    std::unique_ptr<VantagePointTree> * treeOut = nullptr);
 
 /** Calculate a new set of sparse probabilities for an example, re-applying
     what was learned from a previous sparseProbsFromCoords implementation.
@@ -252,8 +306,7 @@ sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
     - as in sparseProbsFromCoords()
 */
 TsneSparseProbs
-sparseProbsFromCoords(const boost::multi_array<float, 2> & coords,
-                      const float * newExampleCoords,
+sparseProbsFromCoords(const std::function<float (int)> & dist,
                       const VantagePointTree & tree,
                       int numNeighbours,
                       double perplexity,
@@ -272,14 +325,21 @@ retsne(const ML::distribution<float> & probs,
        const boost::multi_array<float, 2> & prevOutput,
        const TSNE_Params & params = TSNE_Params());
 
-/** Re-tsne multiple vectors in parallel.  This is equivalent to calling
-    retsne on each of the inputs one at a time and accumulating the
-    results.
-*/
-std::vector<ML::distribution<float> >
-retsne(const std::vector<ML::distribution<float> > & probs,
-       const boost::multi_array<float, 2> & prevOutput,
-       const TSNE_Params & params = TSNE_Params());
+
+ML::distribution<float>
+retsneApproxFromSparse(const TsneSparseProbs & neighbours,
+                       const boost::multi_array<float, 2> & prevOutput,
+                       const Quadtree & qtree,
+                       const TSNE_Params & params);
+
+
+ML::distribution<float>
+retsneApproxFromCoords(const ML::distribution<float> & coords,
+                       const boost::multi_array<float, 2> & coreCoords,
+                       const boost::multi_array<float, 2> & prevOutput,
+                       const Quadtree & qtree,
+                       const VantagePointTree & vpTree,
+                       const TSNE_Params & params);
 
 
 } // namespace ML

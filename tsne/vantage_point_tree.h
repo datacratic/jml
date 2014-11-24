@@ -97,7 +97,7 @@ struct VantagePointTree {
         // First, find the distance to the object at this node
         float pivotDistance = distance(objectNumber);
         
-        if (pivotDistance < maximumDist)
+        if (pivotDistance <= maximumDist)
             result.emplace_back(pivotDistance, objectNumber);
 
         if (!inside && !outside)
@@ -140,8 +140,12 @@ struct VantagePointTree {
 
         addResults(toSearchFirst->search(distance, n, maximumDist));
 
+        // We are conservative by this factor with distance comparisons, to
+        // make the algorithm somewhat robust to slight numerical differences.
+        float fudgeFactor = 1.00001f;
+
         if (toSearchSecond &&
-            (result.size() < n || maximumDist > closestPossibleSecond)) {
+            (result.size() < n || maximumDist * fudgeFactor >= closestPossibleSecond)) {
             addResults(toSearchSecond->search(distance, n, maximumDist));
         }
 
