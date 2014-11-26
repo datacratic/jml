@@ -152,6 +152,12 @@ struct VantagePointTree {
         return result;
     }
 
+    size_t memusage() const
+    {
+        return sizeof(*this)
+            + (inside ? inside->memusage() : 0)
+            + (outside ? outside->memusage() : 0);
+    }
 };
 
 } // namespace ML

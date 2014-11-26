@@ -1360,10 +1360,22 @@ sparseProbsFromCoords(const std::function<float (int)> & dist,
     }
 #endif
 
+    for (unsigned i = 0;  i < exNeighbours.size();  ++i) {
+        // Ensure distance is finite
+        ExcAssert(isfinite(exNeighbours[i].first));
+
+        // Ensure that distance is positive
+        ExcAssertGreaterEqual(exNeighbours[i].first, 0.0);
+    }
+
     // Remove the closest one if asked (this is needed when this example itself is
     // in the tree
     if (toRemove != -1) {
+        // Make sure that at least one neighbour was found
         ExcAssertGreaterEqual(exNeighbours.size(), 1);
+
+        // Check that it really did have zero distance
+        ExcAssertEqual(exNeighbours[0].first, 0.0);
 
         int foundAt = -1;
         for (unsigned i = 0;  i < exNeighbours.size();  ++i) {
@@ -1373,7 +1385,10 @@ sparseProbsFromCoords(const std::function<float (int)> & dist,
             }
         }
 
-        if (foundAt == -1) {
+        // Check that it really did have zero distance
+        //ExcAssertEqual(exNeighbours[foundAt].first, 0.0);
+
+        if (foundAt == -1 && exNeighbours.back().first != 0.0) {
             static std::mutex mutex;
             std::unique_lock<std::mutex> guard(mutex);
 
@@ -1394,12 +1409,12 @@ sparseProbsFromCoords(const std::function<float (int)> & dist,
             }
         }
 
-        ExcAssertNotEqual(foundAt, -1);
+        if (exNeighbours.back().first != 0.0)
+            ExcAssertNotEqual(foundAt, -1);
 
-        // Check that it really did have zero distance
-        ExcAssertEqual(exNeighbours[foundAt].first, 0.0);
-
-        exNeighbours.erase(exNeighbours.begin() + foundAt);
+        if (foundAt != -1) {
+            exNeighbours.erase(exNeighbours.begin() + foundAt);
+        }
     }
 
     // Sort by index number
@@ -1418,7 +1433,8 @@ sparseProbsFromCoords(const std::function<float (int)> & dist,
     std::tie(result.probs, std::ignore)
         = binary_search_perplexity(distances * distances, perplexity, -1, tolerance);
 
-    // Don't allow zero probabilities
+    // Threshold out zero probabilities.  This is better than removing
+    // them as if we remove, they don't become a constraint.
     for (auto & p: result.probs) {
         p = std::max(p, 1e-12f);
     }
@@ -1573,8 +1589,17 @@ struct CalcRepContext {
 
         int effectiveNumChildren = node.numChildren - inside;
 
-        if (effectiveNumChildren == 0)
+        if (effectiveNumChildren == 0) {
+
+            // If there is a point of interest that is exactly the same as
+            // y which is exactly the same as the child node, then we have
+            // to call onNode for the point of interest, with a distance of
+            // zero (and hence a Zq of 1 / (1 + 0) = 1).
+            if (!pointsInside.empty()) {
+                onNode(node, 1.0f, pointsInside);
+            }
             return;
+        }
 
         float ncr = node.recipNumChildren[inside];
 
@@ -1915,6 +1940,7 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
                 bool exact = forceExactSolution;
 
                 int poiDone = 0;
+                //std::set<int> poiDoneSet;
 
                 auto onNode = [&] (const QuadtreeNode & node,
                                    double qCellZ,
@@ -1935,6 +1961,11 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
                     }
 
                     poiDone += pointsOfInterest.size();
+
+                    // For debugging, keep track of a set of them
+                    //for (int p: pointsOfInterest) {
+                    //    ExcAssert(poiDoneSet.insert(p).second);
+                    //}
                 };
 
                 auto getPointCoord = [&] (int point) -> const QCoord &
@@ -1953,6 +1984,15 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
                             y, &FrepZ[x][0], exampleZ, nodesTouched, nd, exact,
                             onNode, pointsOfInterest, getPointCoord,
                             params.min_distance_ratio);
+
+                    //if (poiDone != neighbours.indexes.size()) {
+                    //    cerr << "Not all POI are done" << endl;
+                    //    for (int p: pointsOfInterest)
+                    //        if (!poiDoneSet.count(p))
+                    //            cerr << "point " << p << " was not done"
+                    //                 << endl;
+                    //}
+
                     ExcAssertEqual(poiDone, neighbours.indexes.size());
                     //if (!isfinite(exampleCFactor[x]))
                     //    cerr << "x = " << x << " factor " << exampleCFactor[x] << endl;

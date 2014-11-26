@@ -265,6 +265,17 @@ struct QuadtreeNode {
 
         return true;
     }
+
+    size_t memusage() const
+    {
+        size_t result = sizeof(*this);
+        for (auto & q: quadrants) {
+            if (q)
+                result += q->memusage();
+        }
+
+        return result;
+    }
 };
 
 struct Quadtree {
