@@ -1293,14 +1293,14 @@ sparseProbsFromCoords(const std::function<float (int, int)> & dist,
                       int numNeighbours,
                       double perplexity,
                       double tolerance,
-                      std::unique_ptr<VantagePointTree> * treeOut)
+                      std::unique_ptr<VantagePointTreeT<int> > * treeOut)
 {
     std::vector<int> examples;
     for (unsigned i = 0;  i < nx;  ++i)
         examples.push_back(i);
 
-    std::unique_ptr<VantagePointTree> tree
-        (VantagePointTree::create(examples, dist));
+    std::unique_ptr<VantagePointTreeT<int> > tree
+        (VantagePointTreeT<int>::create(examples, dist));
 
     // For each one, find the numNeighbours nearest neighbours
     std::vector<TsneSparseProbs> neighbours(nx);
@@ -1332,7 +1332,7 @@ sparseProbsFromCoords(const std::function<float (int, int)> & dist,
 
 TsneSparseProbs
 sparseProbsFromCoords(const std::function<float (int)> & dist,
-                      const VantagePointTree & tree,
+                      const VantagePointTreeT<int> & tree,
                       int numNeighbours,
                       double perplexity,
                       double tolerance,
@@ -1500,7 +1500,7 @@ tsneApproxFromCoords(const boost::multi_array<float, 2> & coords,
                      int num_dims,
                      const TSNE_Params & params,
                      const TSNE_Callback & callback,
-                     std::unique_ptr<VantagePointTree> * treeOut,
+                     std::unique_ptr<VantagePointTreeT<int> > * treeOut,
                      std::unique_ptr<Quadtree> * qtreeOut)
 {
     PythagDistFromCoords dist(coords);
@@ -2400,7 +2400,7 @@ retsneApproxFromCoords(const ML::distribution<float> & newExampleCoords,
                        const boost::multi_array<float, 2> & coreCoords,
                        const boost::multi_array<float, 2> & prevOutput,
                        const Quadtree & qtree,
-                       const VantagePointTree & vpTree,
+                       const VantagePointTreeT<int> & vpTree,
                        const TSNE_Params & params)
 {
     int nd = coreCoords.shape()[1];

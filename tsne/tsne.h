@@ -23,7 +23,7 @@
 
 namespace ML {
 
-struct VantagePointTree;
+template<typename Item> struct VantagePointTreeT;
 struct Quadtree;
 
 /** Calculate the probability distribution that gives the given
@@ -198,7 +198,7 @@ tsneApproxFromCoords(const boost::multi_array<float, 2> & coords,
                      int num_dims,
                      const TSNE_Params & params = TSNE_Params(),
                      const TSNE_Callback & callback = TSNE_Callback(),
-                     std::unique_ptr<VantagePointTree> * treeOut = nullptr,
+                     std::unique_ptr<VantagePointTreeT<int>> * treeOut = nullptr,
                      std::unique_ptr<Quadtree> * qtreeOut = nullptr);
 
 /** Structure used to implement a distance function between coordinates
@@ -286,7 +286,7 @@ sparseProbsFromDist(const std::function<float (int, int)> & dist,
                     int numNeighbours,
                     double perplexity,
                     double tolerance = 1e-5,
-                    std::unique_ptr<VantagePointTree> * treeOut = nullptr);
+                    std::unique_ptr<VantagePointTreeT<int> > * treeOut = nullptr);
 
 /** Calculate a new set of sparse probabilities for an example, re-applying
     what was learned from a previous sparseProbsFromCoords implementation.
@@ -307,7 +307,7 @@ sparseProbsFromDist(const std::function<float (int, int)> & dist,
 */
 TsneSparseProbs
 sparseProbsFromCoords(const std::function<float (int)> & dist,
-                      const VantagePointTree & tree,
+                      const VantagePointTreeT<int> & tree,
                       int numNeighbours,
                       double perplexity,
                       double tolerance = 1e-5,
@@ -338,7 +338,7 @@ retsneApproxFromCoords(const ML::distribution<float> & coords,
                        const boost::multi_array<float, 2> & coreCoords,
                        const boost::multi_array<float, 2> & prevOutput,
                        const Quadtree & qtree,
-                       const VantagePointTree & vpTree,
+                       const VantagePointTreeT<int> & vpTree,
                        const TSNE_Params & params);
 
 

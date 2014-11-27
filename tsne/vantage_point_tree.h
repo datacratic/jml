@@ -11,44 +11,45 @@
 
 namespace ML {
 
-struct VantagePointTree {
+template<typename Item>
+struct VantagePointTreeT {
 
-    VantagePointTree(int objectNumber, double radius,
-                     std::unique_ptr<VantagePointTree> && inside,
-                     std::unique_ptr<VantagePointTree> && outside)
-        : objectNumber(objectNumber),
+    VantagePointTreeT(Item item, double radius,
+                     std::unique_ptr<VantagePointTreeT> && inside,
+                     std::unique_ptr<VantagePointTreeT> && outside)
+        : item(item),
           radius(radius),
           inside(std::move(inside)), outside(std::move(outside))
     {
     }
 
-    VantagePointTree(int objectNumber)
-        : objectNumber(objectNumber),
+    VantagePointTreeT(Item item)
+        : item(item),
           radius(std::numeric_limits<float>::quiet_NaN())
     {
     }
 
-    int objectNumber;
+    Item item;
     double radius;
 
     /// Children that are inside the ball of the given radius on object
-    std::unique_ptr<VantagePointTree> inside;
+    std::unique_ptr<VantagePointTreeT> inside;
 
     /// Children that are outside the ball of given radius on the object
-    std::unique_ptr<VantagePointTree> outside;
+    std::unique_ptr<VantagePointTreeT> outside;
 
-    static VantagePointTree *
-    create(const std::vector<int> & objectsToInsert,
-           const std::function<float (int, int)> & distance)
+    static VantagePointTreeT *
+    create(const std::vector<Item> & objectsToInsert,
+           const std::function<float (Item, Item)> & distance)
     {
         if (objectsToInsert.empty())
             return nullptr;
 
         if (objectsToInsert.size() == 1)
-            return new VantagePointTree(objectsToInsert[0]);
+            return new VantagePointTreeT(objectsToInsert[0]);
 
         // 1.  Choose a random object, in this case the first one
-        int pivot = objectsToInsert[0];
+        Item pivot = objectsToInsert[0];
 
         // Calculate distances to all children
         ML::distribution<float> distances(objectsToInsert.size());
@@ -64,8 +65,8 @@ struct VantagePointTree {
         float radius = distances[distances.size() / 2];
 
         // Split into two subgroups
-        std::vector<int> insideObjects;
-        std::vector<int> outsideObjects;
+        std::vector<Item> insideObjects;
+        std::vector<Item> outsideObjects;
 
         for (unsigned i = 1;  i < objectsToInsert.size();  ++i) {
             if (distances[i] < radius)
@@ -74,37 +75,37 @@ struct VantagePointTree {
                 outsideObjects.push_back(objectsToInsert[i]);
         }
 
-        std::unique_ptr<VantagePointTree> inside, outside;
+        std::unique_ptr<VantagePointTreeT> inside, outside;
         if (!insideObjects.empty())
             inside.reset(create(insideObjects, distance));
         if (!outsideObjects.empty())
             outside.reset(create(outsideObjects, distance));
 
-        return new VantagePointTree(pivot, radius,
-                                    std::move(inside), std::move(outside));
+        return new VantagePointTreeT(pivot, radius,
+                                     std::move(inside), std::move(outside));
     }
 
     /** Return the at most n closest neighbours, which must all have a
         distance of less than minimumRadius.
     */
-    std::vector<std::pair<float, int> >
-    search(const std::function<float (int)> & distance,
+    std::vector<std::pair<float, Item> >
+    search(const std::function<float (Item)> & distance,
                       int n,
                       float maximumDist) const
     {
-        std::vector<std::pair<float, int> > result;
+        std::vector<std::pair<float, Item> > result;
 
         // First, find the distance to the object at this node
-        float pivotDistance = distance(objectNumber);
+        float pivotDistance = distance(item);
         
         if (pivotDistance <= maximumDist)
-            result.emplace_back(pivotDistance, objectNumber);
+            result.emplace_back(pivotDistance, item);
 
         if (!inside && !outside)
             return result;
 
-        const VantagePointTree * toSearchFirst;
-        const VantagePointTree * toSearchSecond = nullptr;
+        const VantagePointTreeT * toSearchFirst;
+        const VantagePointTreeT * toSearchSecond = nullptr;
         float closestPossibleSecond = INFINITY;
 
         // Choose which subtree to search first, and the condition for
@@ -125,7 +126,7 @@ struct VantagePointTree {
         }
 
         // Add the results to the current set of nearest neighbours
-        auto addResults = [&] (const std::vector<std::pair<float, int> > & found)
+        auto addResults = [&] (const std::vector<std::pair<float, Item> > & found)
             {
                 // Insert into results list and look for the new maximum distance
                 result.insert(result.end(), found.begin(), found.end());
@@ -159,5 +160,7 @@ struct VantagePointTree {
             + (outside ? outside->memusage() : 0);
     }
 };
+
+typedef VantagePointTreeT<int> VantagePointTree;
 
 } // namespace ML
