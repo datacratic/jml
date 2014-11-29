@@ -8,28 +8,44 @@
 #pragma once
 
 #include "jml/stats/distribution.h"
+#include "jml/utils/exc_assert.h"
 
 namespace ML {
 
 template<typename Item>
 struct VantagePointTreeT {
 
+    VantagePointTreeT(const std::vector<Item> & items, double radius,
+                      std::unique_ptr<VantagePointTreeT> && inside,
+                      std::unique_ptr<VantagePointTreeT> && outside)
+        : items(items),
+          radius(radius),
+          inside(std::move(inside)), outside(std::move(outside))
+    {
+    }
+
     VantagePointTreeT(Item item, double radius,
                      std::unique_ptr<VantagePointTreeT> && inside,
                      std::unique_ptr<VantagePointTreeT> && outside)
-        : item(item),
+        : items(1, item),
           radius(radius),
           inside(std::move(inside)), outside(std::move(outside))
     {
     }
 
     VantagePointTreeT(Item item)
-        : item(item),
+        : items(1, item),
           radius(std::numeric_limits<float>::quiet_NaN())
     {
     }
 
-    Item item;
+    VantagePointTreeT(const std::vector<Item> & items)
+        : items(items),
+          radius(std::numeric_limits<float>::quiet_NaN())
+    {
+    }
+
+    std::vector<Item> items;  // all these have zero distance from each other
     double radius;
 
     /// Children that are inside the ball of the given radius on object
@@ -42,6 +58,28 @@ struct VantagePointTreeT {
     create(const std::vector<Item> & objectsToInsert,
            const std::function<float (Item, Item)> & distance)
     {
+        auto distances = [&] (Item pivot,
+                              const std::vector<Item> & items2,
+                              int depth)
+            {
+                // Calculate distances to all children
+                ML::distribution<float> distances(items2.size());
+
+                for (unsigned i = 0;  i < objectsToInsert.size();  ++i) {
+                    distances[i] = distance(pivot, items2[i]);
+                }
+
+                return distances;
+            };
+
+        return createParallel(objectsToInsert, distances, 0);
+    }
+
+    static VantagePointTreeT *
+    createParallel(const std::vector<Item> & objectsToInsert,
+                   const std::function<ML::distribution<float> (Item, const std::vector<Item> &, int)> & distance,
+                   int depth = 0)
+    {
         if (objectsToInsert.empty())
             return nullptr;
 
@@ -52,36 +90,55 @@ struct VantagePointTreeT {
         Item pivot = objectsToInsert[0];
 
         // Calculate distances to all children
-        ML::distribution<float> distances(objectsToInsert.size());
+        ML::distribution<float> distances
+            = distance(pivot, objectsToInsert, depth);
 
-        for (unsigned i = 1;  i < objectsToInsert.size();  ++i) {
-            distances[i] = distance(pivot, objectsToInsert[i]);
+        ExcAssertEqual(distances.size(), objectsToInsert.size());
+
+        // Sort them
+        std::vector<std::pair<float, Item> > sorted;
+        sorted.reserve(objectsToInsert.size());
+        for (unsigned i = 0;  i < objectsToInsert.size();  ++i) {
+            sorted.emplace_back(distances[i], objectsToInsert[i]);
         }
+
+        // Find the first one that's not zero
+        std::vector<Item> items;
+        size_t firstNonZero = 0;
+        while (firstNonZero < sorted.size() && sorted[firstNonZero].first == 0.0) {
+            items.push_back(sorted[firstNonZero].second);
+            ++firstNonZero;
+        }
+
+        ExcAssertGreaterEqual(items.size(), 1);
+
+        // If all have zero distance, just put them all in together
+        if (firstNonZero == sorted.size()) {
+            return new VantagePointTreeT(items);
+        }
+
+        // Get median distance, to use as a radius
+        size_t splitPoint = firstNonZero + (distances.size() - firstNonZero) / 2;
+        float radius = distances[splitPoint];
         
-        ML::distribution<float> sorted(distances.begin(), distances.end());
-        std::sort(sorted.begin() + 1, sorted.end());
-
-        // Get median distance
-        float radius = distances[distances.size() / 2];
-
         // Split into two subgroups
         std::vector<Item> insideObjects;
         std::vector<Item> outsideObjects;
 
-        for (unsigned i = 1;  i < objectsToInsert.size();  ++i) {
-            if (distances[i] < radius)
-                insideObjects.push_back(objectsToInsert[i]);
+        for (unsigned i = firstNonZero;  i < objectsToInsert.size();  ++i) {
+            if (sorted[i].first < radius)
+                insideObjects.push_back(sorted[i].second);
             else
-                outsideObjects.push_back(objectsToInsert[i]);
+                outsideObjects.push_back(sorted[i].second);
         }
 
         std::unique_ptr<VantagePointTreeT> inside, outside;
         if (!insideObjects.empty())
-            inside.reset(create(insideObjects, distance));
+            inside.reset(createParallel(insideObjects, distance, depth + 1));
         if (!outsideObjects.empty())
-            outside.reset(create(outsideObjects, distance));
+            outside.reset(createParallel(outsideObjects, distance, depth + 1));
 
-        return new VantagePointTreeT(pivot, radius,
+        return new VantagePointTreeT(items, radius,
                                      std::move(inside), std::move(outside));
     }
 
@@ -96,10 +153,15 @@ struct VantagePointTreeT {
         std::vector<std::pair<float, Item> > result;
 
         // First, find the distance to the object at this node
-        float pivotDistance = distance(item);
+        float pivotDistance = distance(items.at(0));
         
-        if (pivotDistance <= maximumDist)
-            result.emplace_back(pivotDistance, item);
+        if (pivotDistance <= maximumDist) {
+            for (auto & item: items)
+                result.emplace_back(pivotDistance, item);
+        }
+
+        if (result.size() > n)
+            result.resize(n);
 
         if (!inside && !outside)
             return result;
