@@ -72,6 +72,9 @@ Worker_Task(int threads)
 
     //cerr << "creating worker task with " << threads << " threads" << endl;
 
+    if (threads > 1024)
+        throw ML::Exception("Trying to create too many threads in worker task");
+
     /* Create our threads */
     for (unsigned i = 0;  i < threads;  ++i)
         workerThreads_.emplace_back(new std::thread(std::bind(&Worker_Task::runWorkerThread, this)));
