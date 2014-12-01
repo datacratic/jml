@@ -9,6 +9,7 @@
 
 #include "jml/stats/distribution.h"
 #include "jml/utils/exc_assert.h"
+#include <iostream>
 
 namespace ML {
 
@@ -80,6 +81,8 @@ struct VantagePointTreeT {
                    const std::function<ML::distribution<float> (Item, const std::vector<Item> &, int)> & distance,
                    int depth = 0)
     {
+        using namespace std;
+
         if (objectsToInsert.empty())
             return nullptr;
 
@@ -126,11 +129,19 @@ struct VantagePointTreeT {
         std::vector<Item> outsideObjects;
 
         for (unsigned i = firstNonZero;  i < objectsToInsert.size();  ++i) {
-            if (sorted[i].first < radius)
+            if (sorted[i].first <= radius)
                 insideObjects.push_back(sorted[i].second);
             else
                 outsideObjects.push_back(sorted[i].second);
         }
+
+        std::sort(insideObjects.begin(), insideObjects.end());
+        std::sort(outsideObjects.begin(), outsideObjects.end());
+        
+        //cerr << "depth = " << depth << " to insert " << objectsToInsert.size()
+        //     << " pivot items " << items.size()
+        //     << " inside " << insideObjects.size() << " outside "
+        //     << outsideObjects.size() << endl;
 
         std::unique_ptr<VantagePointTreeT> inside, outside;
         if (!insideObjects.empty())
