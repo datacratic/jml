@@ -26,6 +26,7 @@
 #include "jml/arch/simd_vector.h"
 #include "jml/utils/pair_utils.h"
 #include <iomanip>
+#include <set>
 
 using namespace ML;
 using namespace std;
@@ -89,34 +90,6 @@ BOOST_AUTO_TEST_CASE( test_quadtree )
     }    
     
     BOOST_CHECK_GE(qtree.root->finish(), nx);
-
-    std::set<int> pointsDone;
-
-    std::function<void (const QuadtreeNode & node) > onNode
-        = [&] (const QuadtreeNode & node, const std::vector<int> & pointsInside)
-        {
-            if (node.type == QuadtreeNode::TERMINAL) {
-                for (int p: pointsInside)
-                    ExcAssert(pointsDone.insert(p).second);
-            }
-
-            std::vector<int> quadrantPoints[1 << nd];
-            for (int p: pointsInside) {
-                int quad = node.quadrant(getPointCoord(p));
-                quadrantPoints[quad].push_back(p);
-            }
-
-            if (node.quadrants[i])
-                calc(*node.quadrants[i], depth + 1, i == quad, quadrantPoints[i]);
-            else
-                ExcAssert(quadrantPoints[i].empty());
-        };
-    
-    std::vector<int> points(nx);
-    for (unsigned i = 0;  i < nx;  ++i)
-        points[i] = i;
-
-    onNode(*qtree.root, points);
 }
 
 
