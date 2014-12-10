@@ -59,14 +59,14 @@ struct VantagePointTreeT {
     create(const std::vector<Item> & objectsToInsert,
            const std::function<float (Item, Item)> & distance)
     {
-        auto distances = [&] (Item pivot,
-                              const std::vector<Item> & items2,
-                              int depth)
+        auto distances = [&distance] (Item pivot,
+                                      const std::vector<Item> & items2,
+                                      int depth)
             {
                 // Calculate distances to all children
                 ML::distribution<float> distances(items2.size());
 
-                for (unsigned i = 0;  i < objectsToInsert.size();  ++i) {
+                for (unsigned i = 0;  i < items2.size();  ++i) {
                     distances[i] = distance(pivot, items2[i]);
                 }
 
@@ -97,6 +97,9 @@ struct VantagePointTreeT {
             = distance(pivot, objectsToInsert, depth);
 
         ExcAssertEqual(distances.size(), objectsToInsert.size());
+
+        //for (float d: distances)
+        //    ExcAssert(isfinite(d));
 
         // Sort them
         std::vector<std::pair<float, Item> > sorted;

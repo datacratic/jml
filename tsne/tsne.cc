@@ -1532,6 +1532,9 @@ float
 PythagDistFromCoords::
 operator () (int x1, int x2) const
 {
+    ExcAssertLess(x1, nx);
+    ExcAssertLess(x2, nx);
+
     if (x1 == x2)
         return 0.0f;
     if (x2 < x1)
