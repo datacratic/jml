@@ -51,9 +51,10 @@ struct judy_multi_array_base {
     bool count(const Key & key) const
     {
         unsigned long key_section = Extractor().template get<Level-1>(key);
-        if (array.count(key_section))
-            return array[key_section].count(key);
-        else return 0;
+        auto it = array.find(key_section);
+        if (it == array.end())
+            return 0;
+        return (*it).count(key);
     }
 
     void clear()

@@ -51,13 +51,17 @@ template<>
 struct Feature_Extractor::access<0> {
     static void set(Feature & feat, unsigned long val)
     {
-        feat.args_[1] = (val >> 32UL);
-        feat.args_[2] = val;
+        uint32_t high = val >> 32;
+        uint32_t low  = val;
+        feat.args_[1] = high;
+        feat.args_[2] = low;
     }
     
     static const unsigned long get(const Feature & feat)
     {
-        return (unsigned long)feat.args_[1] << 32UL | feat.args_[2];
+        uint64_t high = (uint32_t)feat.args_[1];
+        uint64_t low  = (uint32_t)feat.args_[2];
+        return high << 32 | low;
     }
 };
 
@@ -70,7 +74,7 @@ struct Feature_Extractor::access<1> {
     
     static const unsigned long get(const Feature & feat)
     {
-        return feat.args_[0];
+        return (uint32_t)feat.args_[0];
     }
 };
     

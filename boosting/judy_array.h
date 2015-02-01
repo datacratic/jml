@@ -676,7 +676,7 @@ public:
     
     const_iterator find(const key_type & key) const
     {
-        return judyl_base::find(key);
+        return const_iterator(iterator_base(judyl_base::find(key)));
     }
     
     void clear()
