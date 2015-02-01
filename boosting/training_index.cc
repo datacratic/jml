@@ -16,6 +16,7 @@
 #include <boost/timer.hpp>
 #include "jml/utils/string_functions.h"
 #include "jml/arch/demangle.h"
+#include "jml/utils/exc_assert.h"
 #include <set>
 
 
@@ -130,7 +131,8 @@ init(const Training_Data & data,
     /* Finalize the data structures. */
     for (Itl::index_type::iterator it = itl->index.begin();
          it != itl->index.end();  ++it) {
-        Feature feature = it.key();
+        Feature feature = it->feature;
+        ExcAssertEqual(it.key(), it->feature);
         itl->all_features.push_back(feature);
         if (!it->used) continue;
 
@@ -210,13 +212,12 @@ joint(const Feature & target, const Feature & independent,
         throw Exception("Dataset_Index::joint(): distribution between "
                         "a feature and itself requested; use dist() if "
                         "this is really what you mean");
-    
-    bool want_buckets = (num_buckets > 0);
-    bool want_labels = true;
-    bool want_counts = true;
-    bool want_examples = true;
-    bool want_divisors = true;
-    bool want_values = true;
+
+    //if (!itl->index.count(target)) {
+    //    cerr << "target = " << target << endl;
+    //    throw ML::Exception("Dataset index of %zd features doesn't include target",
+    //                        itl->index.size());
+    //}
 
     /* Labels are joint between two distributions. */
     const Label * labels = 0;
@@ -227,9 +228,29 @@ joint(const Feature & target, const Feature & independent,
     const float * divisors = 0;
     const float * values = 0;
 
-    if (itl->index[independent].seen == 0) // unknown feature...
+    if (!itl->index.count(independent) || !itl->index[independent].used) {
+        //cerr << "independent = " << independent << endl;
+        // Unknown feature
         return Joint_Index(values, buckets, labels, examples, counts, divisors,
                            0, bucket_splits);
+        
+        throw ML::Exception("Dataset index of %zd features doesn't include independent",
+                            itl->index.size());
+    }
+
+    ExcAssert(itl->index.count(target));
+    ExcAssert(itl->index.count(independent));
+    ExcAssert(itl->index[target].used);
+    ExcAssert(itl->index[independent].used);
+    //cerr << "joint between " << target << " and " << independent << " with index size "
+    //     << itl->index.size() << " at " << this << endl;
+    
+    bool want_buckets = (num_buckets > 0);
+    bool want_labels = true;
+    bool want_counts = true;
+    bool want_examples = true;
+    bool want_divisors = true;
+    bool want_values = true;
 
     if (want_labels) {
         const vector<Label> & example_labels

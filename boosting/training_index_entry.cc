@@ -55,9 +55,18 @@ void
 Dataset_Index::Index_Entry::
 check_used() const
 {
-    if (!used)
-        throw Exception("attempt to access unused feature %s",
-                        feature_space->print(feature).c_str());
+    ExcAssert(this);
+    if (!used) {
+        if (feature_space) {
+            throw Exception("attempt to access unused feature %s",
+                            feature_space->print(feature).c_str());
+        }
+        else {
+            throw Exception("attempt to access unused feature %s",
+                            feature.print().c_str());
+        }
+    }
+
 }
    
 void Dataset_Index::Index_Entry::
