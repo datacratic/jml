@@ -9,6 +9,7 @@
 
 #include "jml/utils/compact_vector.h"
 #include "jml/utils/exc_assert.h"
+#include "jml/db/persistent_fwd.h"
 #include <iostream>
 
 namespace ML {
@@ -276,6 +277,9 @@ struct QuadtreeNode {
 
         return result;
     }
+
+    void serialize(DB::Store_Writer & store) const;
+    void reconstitute(DB::Store_Reader & store);
 };
 
 struct Quadtree {
@@ -291,6 +295,9 @@ struct Quadtree {
     }
 
     std::unique_ptr<QuadtreeNode> root;
+
+    void serialize(DB::Store_Writer & store) const;
+    void reconstitute(DB::Store_Reader & store);
 };
 
 } // namespace ML

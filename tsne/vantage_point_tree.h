@@ -9,6 +9,7 @@
 
 #include "jml/stats/distribution.h"
 #include "jml/utils/exc_assert.h"
+#include "jml/db/persistent.h"
 #include <iostream>
 
 namespace ML {
@@ -43,6 +44,11 @@ struct VantagePointTreeT {
     VantagePointTreeT(const std::vector<Item> & items)
         : items(items),
           radius(std::numeric_limits<float>::quiet_NaN())
+    {
+    }
+
+    VantagePointTreeT()
+        : radius(INFINITY)
     {
     }
 
@@ -234,6 +240,43 @@ struct VantagePointTreeT {
         return sizeof(*this)
             + (inside ? inside->memusage() : 0)
             + (outside ? outside->memusage() : 0);
+    }
+
+    void serialize(DB::Store_Writer & store) const
+    {
+        store << items << radius;
+        serializePtr(store, inside.get());
+        serializePtr(store, outside.get());
+    }
+
+    void reconstitute(DB::Store_Reader & store)
+    {
+        store >> items >> radius;
+        inside.reset(reconstitutePtr(store));
+        outside.reset(reconstitutePtr(store));
+    }
+
+    static void serializePtr(DB::Store_Writer & store, const VantagePointTreeT * ptr)
+    {
+        using namespace ML::DB;
+        if (!ptr) {
+            store << compact_size_t(0);
+            return;
+        }
+        store << compact_size_t(1);
+        ptr->serialize(store);
+    }
+
+    static VantagePointTreeT * reconstitutePtr(DB::Store_Reader & store)
+    {
+        using namespace ML::DB;
+        compact_size_t present(store);
+        if (!present)
+            return nullptr;
+        ExcAssertEqual(present, 1);
+        std::unique_ptr<VantagePointTreeT> result(new VantagePointTreeT());
+        result->reconstitute(store);
+        return result.release();
     }
 };
 

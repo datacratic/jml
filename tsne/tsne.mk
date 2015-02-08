@@ -4,6 +4,7 @@
 
 LIBTSNE_SOURCES := \
         tsne.cc \
+	quadtree.cc
 
 LIBTSNE_LINK :=	utils algebra arch boost_thread stats worker_task
 

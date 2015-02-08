@@ -1543,7 +1543,9 @@ operator () (int x1, int x2) const
                  -2.0f * SIMD::vec_dotprod_dp(&coords[x1][0], &coords[x2][0], nd));
 }
 
-
+// Object we keep around to calculate the repulsive force, by iterating over the
+// quadtree.  We primarily use a separate object to avoid the overhead in passing
+// all of these parameters around.
 struct CalcRepContext {
     CalcRepContext(const ML::distribution<float> & y,
                    double * FrepZ,
@@ -1574,6 +1576,8 @@ struct CalcRepContext {
     /// Used to get the coordinate of a point of interest passed in pointsInside
     const std::function<const QCoord & (int)> & getPointCoord;
 
+    /// Minimum ratio of distance of current cell to distance of further cell to
+    /// skip calculation
     float minDistanceRatio;
 
     std::vector<int> NO_POINTS;
@@ -1741,13 +1745,13 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
                                 exampleNeighbours[j].indexes.size(),
                                 exampleNeighbours[j].probs.size());
 
-        for (unsigned i = 0;  i < exampleNeighbours[i].indexes.size();  ++i) {
+        for (unsigned i = 0;  i < exampleNeighbours[j].indexes.size();  ++i) {
             int index = exampleNeighbours[j].indexes[i];
             //float prob = exampleNeighbours[j].probs[i];
 
             if (index ==j)
                 throw ML::Exception("tsneApproxFromSparse: error in input: "
-                                    "point %d is its own neighbour");
+                                    "point %d is its own neighbour", j);
             //if (prob == 0.0)
             //    throw ML::Exception("tsneApproxFromSparse: error in input: point %d has "
             //                        "zero probability");
@@ -1850,6 +1854,15 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
 
         //cerr << "points are in " << numNodes << " nodes" << endl;
 
+#if 0
+        for (unsigned i = 0;  i < 5;  ++i) {
+            for (unsigned j = 0;  j < 2;  ++j) {
+                cerr << "Y[" << i << "][" << j << "] = " << Y[i][j] << " ";
+            }
+            cerr << endl;
+        }
+#endif     
+   
         // Create a new coordinate for each neighbour
         std::vector<QCoord> pointCoords(nx);
 
@@ -1866,6 +1879,7 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
 
         // Do we calculate the cost?
         bool calcC = iter < 10 || (iter + 1) % 100 == 0 || iter == params.max_iter - 1;
+        //calcC = true;
 
         // Approximation for Z, accumulated here
         ML::Spinlock Zmutex;
@@ -2349,7 +2363,7 @@ tsneApproxFromSparse(const std::vector<TsneSparseProbs> & exampleNeighbours,
         if (callback
             && !callback(iter, cost, "recenter")) break;
 
-        if ((iter + 1) % 100 == 0 || iter == params.max_iter - 1) {
+        if (calcC || (iter + 1) % 100 == 0 || iter == params.max_iter - 1) {
             cerr << format("iteration %4d cost %6.3f  ",
                            iter + 1, cost)
                  << timer.elapsed() << endl;
