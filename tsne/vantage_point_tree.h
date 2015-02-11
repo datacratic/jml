@@ -10,6 +10,7 @@
 #include "jml/stats/distribution.h"
 #include "jml/utils/exc_assert.h"
 #include "jml/db/persistent.h"
+#include "jml/utils/compact_vector.h"
 #include <iostream>
 
 namespace ML {
@@ -20,7 +21,7 @@ struct VantagePointTreeT {
     VantagePointTreeT(const std::vector<Item> & items, double radius,
                       std::unique_ptr<VantagePointTreeT> && inside,
                       std::unique_ptr<VantagePointTreeT> && outside)
-        : items(items),
+        : items(items.begin(), items.end()),
           radius(radius),
           inside(std::move(inside)), outside(std::move(outside))
     {
@@ -36,13 +37,13 @@ struct VantagePointTreeT {
     }
 
     VantagePointTreeT(Item item)
-        : items(1, item),
+        : items{item},
           radius(std::numeric_limits<float>::quiet_NaN())
     {
     }
 
     VantagePointTreeT(const std::vector<Item> & items)
-        : items(items),
+        : items(items.begin(), items.end()),
           radius(std::numeric_limits<float>::quiet_NaN())
     {
     }
@@ -52,7 +53,7 @@ struct VantagePointTreeT {
     {
     }
 
-    std::vector<Item> items;  // all these have zero distance from each other
+    ML::compact_vector<Item, 1> items; // all these have zero distance from each other
     double radius;
 
     /// Children that are inside the ball of the given radius on object
@@ -233,6 +234,19 @@ struct VantagePointTreeT {
         }
 
         return result;
+    }
+
+    /** Create a deep copy of the given node.  This also works for
+        null pointers.
+    */
+    static VantagePointTreeT * deepCopy(const VantagePointTreeT * node)
+    {
+        if (!node)
+            return nullptr;
+        std::unique_ptr<VantagePointTreeT> result(new VantagePointTreeT(*node));
+        result->inside.reset(deepCopy(result->inside.get()));
+        result->outside.reset(deepCopy(result->outside.get()));
+        return result.release();
     }
 
     size_t memusage() const
