@@ -27,6 +27,15 @@ struct VantagePointTreeT {
     {
     }
 
+    VantagePointTreeT(const ML::compact_vector<Item, 1> & items, double radius,
+                      std::unique_ptr<VantagePointTreeT> && inside,
+                      std::unique_ptr<VantagePointTreeT> && outside)
+        : items(items),
+          radius(radius),
+          inside(std::move(inside)), outside(std::move(outside))
+    {
+    }
+
     VantagePointTreeT(Item item, double radius,
                      std::unique_ptr<VantagePointTreeT> && inside,
                      std::unique_ptr<VantagePointTreeT> && outside)
@@ -243,10 +252,10 @@ struct VantagePointTreeT {
     {
         if (!node)
             return nullptr;
-        std::unique_ptr<VantagePointTreeT> result(new VantagePointTreeT(*node));
-        result->inside.reset(deepCopy(result->inside.get()));
-        result->outside.reset(deepCopy(result->outside.get()));
-        return result.release();
+        std::unique_ptr<VantagePointTreeT> inside(deepCopy(node->inside.get()));
+        std::unique_ptr<VantagePointTreeT> outside(deepCopy(node->outside.get()));
+        return new VantagePointTreeT(node->items, node->radius,
+                                     std::move(inside), std::move(outside));
     }
 
     size_t memusage() const
