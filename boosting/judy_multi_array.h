@@ -48,6 +48,15 @@ struct judy_multi_array_base {
         return array[key_section].get(key);
     }
 
+    const Data & at(const Key & key) const
+    {
+        unsigned long key_section = Extractor().template get<Level-1>(key);
+        auto it = array.find(key_section);
+        if (it == array.end())
+            throw ML::Exception("key not found in array");
+        return (*it).at(key);
+    }
+
     bool count(const Key & key) const
     {
         unsigned long key_section = Extractor().template get<Level-1>(key);
@@ -210,6 +219,15 @@ struct judy_multi_array_base<Key, Data, Extractor, MaxLevel, MaxLevel> {
         return array[key_section];
     }
 
+    const Data & at (const Key & key) const
+    {
+        unsigned long key_section = Extractor().template get<MaxLevel-1>(key);
+        auto it = array.find(key_section);
+        if (it == array.end())
+            throw ML::Exception("at(): key not found");
+        return *it;
+    }
+
     void clear()
     {
         array.clear();
@@ -294,6 +312,11 @@ struct judy_multi_array {
     const Data & operator [] (const Key & key) const
     {
         return base.get(key);
+    }
+
+    const Data & at(const Key & key) const
+    {
+        return base.at(key);
     }
 
     bool count(const Key & key) const

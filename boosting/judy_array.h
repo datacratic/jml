@@ -437,6 +437,13 @@ struct judyl_base {
         else return data_type();
     }
 
+    const data_type & at(const key_type & key) const
+    {
+        data_type * pvalue = jlg(key);
+        if (pvalue) return *pvalue;
+        throw ML::Exception("value not present in array");
+    }
+
     size_t memusage_() const
     {
         return JudyLMemUsed(array);
@@ -843,7 +850,7 @@ public:
 
     std::pair<iterator, bool> insert(const value_type & x)
     {
-        data_type ** ppvalue = reinterpret_cast<data_type **>(jlg(x.first));
+        data_type ** ppvalue = reinterpret_cast<data_type **>(this->jlg(x.first));
         //data_type ** ppvalue = (data_type **)JudyLGet(array, x.first, PJE0);
         bool inserted = false;
         if (!ppvalue) {
@@ -893,7 +900,7 @@ public:
     
     const_iterator find(const key_type & key) const
     {
-        return judyl_base::find(key);
+        return iterator_base(judyl_base::find(key));
     }
     
     void clear()
