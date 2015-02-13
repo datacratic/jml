@@ -38,6 +38,23 @@ struct Dataset_Index::Itl {
     std::vector<Feature> all_features;
 };
 
+const Dataset_Index::Index_Entry &
+Dataset_Index::
+getFeatureIndex(const Feature & feature) const
+{
+    return getItl()->index.at(feature);
+}
+
+Dataset_Index::
+Dataset_Index()
+{
+}
+
+Dataset_Index::
+~Dataset_Index()
+{
+}
+
 void
 Dataset_Index::
 init(const Training_Data & data,
@@ -59,7 +76,15 @@ init(const Training_Data & data,
     vector<Feature> features;
 
     std::set<Feature> keep_features(features_.begin(), features_.end());
-    
+
+    // Make sure all have an entry for all features, even if not in training set
+    for (auto & f: features_) {
+        itl->index[f].feature = f;
+        itl->index[f].feature_space = itl->feature_space;
+        itl->index[f].initialized = true;
+        itl->index[f].used = true;
+    }
+
     for (unsigned x = 0;  x < nx;  ++x) {
         //cerr << "x = " << x << " of " << nx << endl;
         const Feature_Set & fs = data[x];
@@ -171,33 +196,33 @@ init(const Training_Data & data,
 
 const std::vector<Feature> & Dataset_Index::all_features() const
 {
-    return itl->all_features;
+    return getItl()->all_features;
 }
 
 const Dataset_Index::Freqs &
 Dataset_Index::freqs(const Feature & feature) const
 {
-    return itl->index[feature].get_freqs();
+    return getFeatureIndex(feature).get_freqs();
 }
 
 const Dataset_Index::Category_Freqs &
 Dataset_Index::category_freqs(const Feature & feature) const
 {
     size_t num_categories
-        = itl->feature_space->info(feature).value_count();
-    return itl->index[feature].get_category_freqs(num_categories);
+        = getItl()->feature_space->info(feature).value_count();
+    return getFeatureIndex(feature).get_category_freqs(num_categories);
 }
 
 const std::vector<Label> &
 Dataset_Index::labels(const Feature & feature) const
 {
-    return itl->index[feature].get_labels();
+    return getFeatureIndex(feature).get_labels();
 }
 
 const std::vector<float> &
 Dataset_Index::values(const Feature & feature) const
 {
-    return itl->index[feature].get_values(BY_EXAMPLE);
+    return getFeatureIndex(feature).get_values(BY_EXAMPLE);
 }
 
 Joint_Index
@@ -213,10 +238,10 @@ joint(const Feature & target, const Feature & independent,
                         "a feature and itself requested; use dist() if "
                         "this is really what you mean");
 
-    //if (!itl->index.count(target)) {
+    //if (!getItl()->index.count(target)) {
     //    cerr << "target = " << target << endl;
     //    throw ML::Exception("Dataset index of %zd features doesn't include target",
-    //                        itl->index.size());
+    //                        getItl()->index.size());
     //}
 
     /* Labels are joint between two distributions. */
@@ -228,22 +253,18 @@ joint(const Feature & target, const Feature & independent,
     const float * divisors = 0;
     const float * values = 0;
 
-    if (!itl->index.count(independent) || !itl->index[independent].used) {
+    if (!getItl()->index.count(independent)) {
         //cerr << "independent = " << independent << endl;
         // Unknown feature
         return Joint_Index(values, buckets, labels, examples, counts, divisors,
                            0, bucket_splits);
         
         throw ML::Exception("Dataset index of %zd features doesn't include independent",
-                            itl->index.size());
+                            getItl()->index.size());
     }
 
-    ExcAssert(itl->index.count(target));
-    ExcAssert(itl->index.count(independent));
-    ExcAssert(itl->index[target].used);
-    ExcAssert(itl->index[independent].used);
-    //cerr << "joint between " << target << " and " << independent << " with index size "
-    //     << itl->index.size() << " at " << this << endl;
+    auto & targetIndex = getFeatureIndex(target);
+    auto & independentIndex = getFeatureIndex(independent);
     
     bool want_buckets = (num_buckets > 0);
     bool want_labels = true;
@@ -254,10 +275,10 @@ joint(const Feature & target, const Feature & independent,
 
     if (want_labels) {
         const vector<Label> & example_labels
-            = itl->index[target].get_labels();
+            = targetIndex.get_labels();
         //cerr << "example_labels = " << example_labels << endl;
         const vector<Label> & mapped_labels
-            = itl->index[independent].get_mapped_labels(example_labels, target,
+            = independentIndex.get_mapped_labels(example_labels, target,
                                                         sort_by);
         //cerr << "mapped_labels = " << mapped_labels << endl;
         labels = &mapped_labels[0];
@@ -265,46 +286,46 @@ joint(const Feature & target, const Feature & independent,
 
     if (want_buckets) {
         const Bucket_Info & bucket_info
-            = itl->index[independent].buckets(num_buckets);
+            = independentIndex.buckets(num_buckets);
         buckets = &bucket_info.buckets[0];
         bucket_splits = &bucket_info.splits;
     }
 
     if (want_counts) {
         const vector<unsigned> & counts_vector
-            = itl->index[independent].get_counts(sort_by);
+            = independentIndex.get_counts(sort_by);
         if (!counts_vector.empty())
             counts = &counts_vector[0];
     }
 
     if (want_divisors) {
         const vector<float> & divisors_vector
-            = itl->index[independent].get_divisors(sort_by);
+            = independentIndex.get_divisors(sort_by);
         if (!divisors_vector.empty())
             divisors = &divisors_vector[0];
     }
 
     if (want_examples) {
         const vector<unsigned> & examples_vector
-            = itl->index[independent].get_examples(sort_by);
+            = independentIndex.get_examples(sort_by);
         if (!examples_vector.empty())
             examples = &examples_vector[0];
     }
 
     if (want_values) {
         const vector<float> & values_vector
-            = itl->index[independent].get_values(sort_by);
+            = independentIndex.get_values(sort_by);
         values = &values_vector[0];
     }
 
     Joint_Index result(values, buckets, labels, examples, counts, divisors,
-                       itl->index[independent].seen, bucket_splits);
+                       independentIndex.seen, bucket_splits);
 
 #if 0
-    if (itl->index[independent].found_twice > 0
-        && itl->feature_space->print(independent) == "lemma-try") {
+    if (independentIndex.found_twice > 0
+        && getItl()->feature_space->print(independent) == "lemma-try") {
         cerr << "got joint distribution for feature "
-             << itl->feature_space->print(independent) << endl;
+             << getItl()->feature_space->print(independent) << endl;
         Index_Iterator it(&result, 0), end(&result, result.size());
 
         int i = 0;
@@ -345,76 +366,76 @@ dist(const Feature & feature, Sort_By sort_by, unsigned content,
     const unsigned * examples = 0;
     const float * values = 0;
 
-    if (itl->index[feature].seen == 0) // unknown feature...
+    if (getFeatureIndex(feature).seen == 0) // unknown feature...
         return Joint_Index(values, buckets, labels, examples, counts, divisors,
                            0, bucket_splits);
     if (want_buckets) {
         const Bucket_Info & bucket_info
-            = itl->index[feature].buckets(num_buckets);
+            = getFeatureIndex(feature).buckets(num_buckets);
         buckets = &bucket_info.buckets[0];
         bucket_splits = &bucket_info.splits;
     }
 
     if (want_counts) {
         const vector<unsigned> & counts_vector
-            = itl->index[feature].get_counts(sort_by);
+            = getFeatureIndex(feature).get_counts(sort_by);
         if (!counts_vector.empty())
             counts = &counts_vector[0];
     }
 
     if (want_divisors) {
         const vector<float> & divisors_vector
-            = itl->index[feature].get_divisors(sort_by);
+            = getFeatureIndex(feature).get_divisors(sort_by);
         if (!divisors_vector.empty())
             divisors = &divisors_vector[0];
     }
 
     if (want_examples) {
         const vector<unsigned> & examples_vector
-            = itl->index[feature].get_examples(sort_by);
+            = getFeatureIndex(feature).get_examples(sort_by);
         if (!examples_vector.empty())
             examples = &examples_vector[0];
     }
 
     if (want_values) {
         const vector<float> & values_vector
-            = itl->index[feature].get_values(sort_by);
+            = getFeatureIndex(feature).get_values(sort_by);
         values = &values_vector[0];
     }
 
     return Joint_Index(values, buckets, labels, examples, counts, divisors,
-                       itl->index[feature].seen, bucket_splits);
+                       getFeatureIndex(feature).seen, bucket_splits);
 }
 
 double Dataset_Index::density(const Feature & feat) const
 {
-    return itl->index[feat].density();
+    return getFeatureIndex(feat).density();
 }
 
 bool Dataset_Index::exactly_one(const Feature & feat) const
 {
-    return itl->index[feat].exactly_one();
+    return getFeatureIndex(feat).exactly_one();
 }
 
 bool Dataset_Index::dense(const Feature & feat) const
 {
-    return itl->index[feat].dense();
+    return getFeatureIndex(feat).dense();
 }
 
 bool Dataset_Index::only_one(const Feature & feat) const
 {
-    return itl->index[feat].only_one();
+    return getFeatureIndex(feat).only_one();
 }
 
 size_t Dataset_Index::count(const Feature & feat) const
 {
-    return itl->index[feat].seen;
+    return getFeatureIndex(feat).seen;
 }
 
 std::pair<float, float> Dataset_Index::range(const Feature & feature) const
 {
-    return make_pair(itl->index[feature].min_value,
-                     itl->index[feature].max_value);
+    return make_pair(getFeatureIndex(feature).min_value,
+                     getFeatureIndex(feature).max_value);
 }
 
 bool Dataset_Index::constant(const Feature & feat) const
@@ -425,7 +446,7 @@ bool Dataset_Index::constant(const Feature & feat) const
 
 bool Dataset_Index::integral(const Feature & feature) const
 {
-    return itl->index[feature].non_integral == 0;
+    return getFeatureIndex(feature).non_integral == 0;
 }
 
 Feature_Info Dataset_Index::
@@ -437,9 +458,9 @@ guess_info(const Feature & feat) const
        say it's inutile.  Otherwise, we say that it's real. */
     //return Feature_Info(PRESENCE);
 
-    const Index_Entry & entry = itl->index[feat];
+    const Index_Entry & entry = getFeatureIndex(feat);
     
-    string name = itl->feature_space->print(feat);
+    string name = getItl()->feature_space->print(feat);
     bool debug = false;//(name == "AVG_FILLED_IN_CONF");
 
     if (debug) cerr << "guess_info for " << name << endl;
@@ -467,11 +488,11 @@ guess_info(const Feature & feat) const
             result.set_type(INUTILE);
         else if (one_value && uniform_one) result.set_type(PRESENCE);
         else if (boolean) result.set_type(BOOLEAN);
-        else if (itl->feature_space->info(feat).type()
+        else if (getItl()->feature_space->info(feat).type()
                      == CATEGORICAL
-                 || itl->feature_space->info(feat).type()
+                 || getItl()->feature_space->info(feat).type()
                      == STRING)
-            result = itl->feature_space->info(feat);
+            result = getItl()->feature_space->info(feat);
 #if 0
         else if (all_integral
                  && entry.min_value >= 0 && entry.max_value <= 255) {
@@ -495,7 +516,7 @@ guess_info(const Feature & feat) const
 Feature_Info Dataset_Index::
 guess_info_categorical(const Feature & feat) const
 {
-    const Index_Entry & entry = itl->index[feat];
+    const Index_Entry & entry = getFeatureIndex(feat);
 
     Mutable_Feature_Info result;
     if (entry.seen == 0)
@@ -514,11 +535,11 @@ guess_info_categorical(const Feature & feat) const
         else if (one_value && uniform_one)
             result.set_type(PRESENCE);
         else if (boolean) result.set_type(BOOLEAN);
-        else if (itl->feature_space->info(feat).type()
+        else if (getItl()->feature_space->info(feat).type()
                      == CATEGORICAL
-                 || itl->feature_space->info(feat).type()
+                 || getItl()->feature_space->info(feat).type()
                      == STRING)
-            result = itl->feature_space->info(feat);
+            result = getItl()->feature_space->info(feat);
         else if (all_integral && entry.min_value >= 0
                  && entry.max_value <= 255) {
             result.set_type(CATEGORICAL);

@@ -230,7 +230,7 @@ finalize(unsigned example_count, const Feature & feature,
 
 const vector<float> &
 Dataset_Index::Index_Entry::
-get_values(Sort_By sort_by)
+get_values(Sort_By sort_by) const
 {
     check_used();
     if (sort_by == BY_EXAMPLE) return values;
@@ -251,7 +251,7 @@ get_values(Sort_By sort_by)
 
 const vector<unsigned> &
 Dataset_Index::Index_Entry::
-get_examples(Sort_By sort_by)
+get_examples(Sort_By sort_by) const
 {
     check_used();
     if (sort_by == BY_EXAMPLE) return examples;
@@ -297,7 +297,7 @@ get_examples(Sort_By sort_by)
 
 const vector<unsigned> &
 Dataset_Index::Index_Entry::
-get_counts(Sort_By sort_by)
+get_counts(Sort_By sort_by) const
 {
     check_used();
     if (only_one()) return counts;  // one per example; no problem
@@ -427,7 +427,7 @@ get_counts(Sort_By sort_by)
 
 const vector<float> &
 Dataset_Index::Index_Entry::
-get_divisors(Sort_By sort_by)
+get_divisors(Sort_By sort_by) const
 {
     check_used();
     /* We calculate these directly from the counts. */
@@ -489,7 +489,7 @@ struct Safe_Less_Pair {
 
 const Dataset_Index::Freqs &
 Dataset_Index::Index_Entry::
-get_freqs()
+get_freqs() const
 {
     check_used();
     if (has_freqs) return freqs;
@@ -575,7 +575,7 @@ get_freqs()
 
 const Dataset_Index::Category_Freqs &
 Dataset_Index::Index_Entry::
-get_category_freqs(size_t num_categories)
+get_category_freqs(size_t num_categories) const
 {
     check_used();
     if (has_category_freqs) {
@@ -610,7 +610,7 @@ get_category_freqs(size_t num_categories)
 
 const vector<Label> &
 Dataset_Index::Index_Entry::
-get_labels()
+get_labels() const
 {
     check_used();
     if (!feature_space && example_count != 0)
@@ -661,7 +661,7 @@ get_labels()
 const vector<Label> &
 Dataset_Index::Index_Entry::
 get_mapped_labels(const vector<Label> & labels, const Feature & target,
-                  Sort_By sort_by)
+                  Sort_By sort_by) const
 {
     check_used();
     //cerr << "examples.size() = " << examples.size() << endl;
@@ -690,8 +690,6 @@ get_mapped_labels(const vector<Label> & labels, const Feature & target,
     /* Get the examples to map. */
     const vector<unsigned> & examples = get_examples(sort_by);
     
-    ExcAssert(!examples.empty());
-
     result = vector<Label>(examples.size());
 
     for (unsigned x = 0;  x < examples.size();  ++x)
@@ -702,7 +700,7 @@ get_mapped_labels(const vector<Label> & labels, const Feature & target,
 
 const Bucket_Info &
 Dataset_Index::Index_Entry::
-create_buckets(size_t num_buckets)
+create_buckets(size_t num_buckets) const
 {
     check_used();
     Guard guard(lock);
@@ -750,7 +748,7 @@ create_buckets(size_t num_buckets)
 
 const Bucket_Info &
 Dataset_Index::Index_Entry::
-buckets(size_t num_buckets)
+buckets(size_t num_buckets) const
 {
     check_used();
     /* If there are more buckets than distinct values, then we use the

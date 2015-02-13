@@ -21,7 +21,6 @@
 
 namespace ML {
 
-
 /** This is the default number of buckets to use.  This tells us how many
     distinct buckets to turn a continuous variable into when doing the
     bucketizing part of finish().
@@ -57,6 +56,9 @@ enum Index_Contents {
 
 class Dataset_Index {
 public:
+    Dataset_Index();
+    ~Dataset_Index();
+
     /** Initialise the index from a dataset.  This will create the bare
         minimum index as fast as possible, by scanning each of the feature
         sets one time.  The rest of the indexes (which are more expensive)
@@ -172,6 +174,9 @@ private:
     struct Itl;
     struct Index_Entry;
     std::shared_ptr<Itl> itl;
+    const Itl * getItl() const { return itl.get(); }
+    const Index_Entry & getFeatureIndex(const Feature & feature) const;
+    const Index_Entry * getFeatureIndexPtr(const Feature & feature) const;
 };
 
 

@@ -32,7 +32,7 @@ namespace ML {
 struct Dataset_Index::Index_Entry {
     Index_Entry();
 
-    Lock lock;  // for when we store things that aren't there
+    mutable Lock lock;  // for when we store things that aren't there
 
     bool used;  ///< True if we use this entry
     bool initialized;
@@ -91,61 +91,61 @@ struct Dataset_Index::Index_Entry {
     std::vector<unsigned> examples;
 
     /** Ditto, but sorted by value. */
-    bool has_examples_sorted;
-    std::vector<unsigned> examples_sorted;
+    mutable bool has_examples_sorted;
+    mutable std::vector<unsigned> examples_sorted;
     
     /** Contains the value each time it was found.  Sorted by example number. */
     std::vector<float> values;
     
     /** Contains the same values as values, but sorted by the value itself. */
-    bool has_values_sorted;
-    std::vector<float> values_sorted;
+    mutable bool has_values_sorted;
+    mutable std::vector<float> values_sorted;
 
     /** Counts per example. */
-    bool has_counts;
-    std::vector<unsigned> counts;
+    mutable bool has_counts;
+    mutable std::vector<unsigned> counts;
 
     /** Counts per example, sorted by the value. */
-    bool has_counts_sorted;
-    std::vector<unsigned> counts_sorted;
+    mutable bool has_counts_sorted;
+    mutable std::vector<unsigned> counts_sorted;
 
     /** Divisors per example. */
-    bool has_divisors;
-    std::vector<float> divisors;
+    mutable bool has_divisors;
+    mutable std::vector<float> divisors;
 
     /** Divisors per example, sorted by the value. */
-    bool has_divisors_sorted;
-    std::vector<float> divisors_sorted;
+    mutable bool has_divisors_sorted;
+    mutable std::vector<float> divisors_sorted;
 
     /** Contains this feature mapped as a label.  Sorted by example number. */
-    bool has_labels;
-    std::vector<Label> labels;
+    mutable bool has_labels;
+    mutable std::vector<Label> labels;
     
     /** Ditto, but sorted by the value. */
-    bool has_labels_sorted;
-    std::vector<Label> labels_sorted;
+    mutable bool has_labels_sorted;
+    mutable std::vector<Label> labels_sorted;
     
     /** Contains the frequency distribution of values, if it has been
         requested. */
-    bool has_freqs;
-    Freqs freqs;
+    mutable bool has_freqs;
+    mutable Freqs freqs;
 
     /** Contains the categorical frequency distribution. */
-    bool has_category_freqs;
-    Category_Freqs category_freqs;
+    mutable bool has_category_freqs;
+    mutable Category_Freqs category_freqs;
 
     struct Mapped_Labels_Entry : public std::vector<Label> {
         bool initialized;
     };
 
     /** Labels for something else, mapped onto our example distribution. */
-    Feature_Map<Mapped_Labels_Entry> mapped_labels;
+    mutable Feature_Map<Mapped_Labels_Entry> mapped_labels;
 
     /** Ditto, but sorted by example. */
-    Feature_Map<Mapped_Labels_Entry> mapped_labels_sorted;
+    mutable Feature_Map<Mapped_Labels_Entry> mapped_labels_sorted;
 
     /** Buckets, one entry for each total number of buckets (cached). */
-    map<unsigned, Bucket_Info> bucket_info;
+    mutable map<unsigned, Bucket_Info> bucket_info;
 
 
     /*************************************************************************/
@@ -169,30 +169,30 @@ struct Dataset_Index::Index_Entry {
     /*************************************************************************/
 
     /** Return the values, sorted as specified. */
-    const vector<float> & get_values(Sort_By sort_by);
+    const vector<float> & get_values(Sort_By sort_by) const;
 
     /** Return the example numbers, sorted as specified.  If the vector is
         empty, then the examples count implicitly from one to the highest
         value. */
-    const vector<unsigned> & get_examples(Sort_By sort_by);
+    const vector<unsigned> & get_examples(Sort_By sort_by) const;
 
     /** Get the example counts.  If the vector is empty, then the counts are
         implicitly one every time. */
-    const vector<unsigned> & get_counts(Sort_By sort_by);
+    const vector<unsigned> & get_counts(Sort_By sort_by) const;
 
     /** Get the divisors.  If the vector is empty, then the divisor is
         implicitly one every time. */
-    const vector<float> & get_divisors(Sort_By sort_by);
+    const vector<float> & get_divisors(Sort_By sort_by) const;
 
     /** Get the frequencies.  These are extracted from the values array. */
-    const Freqs & get_freqs();
+    const Freqs & get_freqs() const;
 
     /** Get the category frequencies.  These are extracted from Freqs. */
-    const Category_Freqs & get_category_freqs(size_t num_categories);
+    const Category_Freqs & get_category_freqs(size_t num_categories) const;
 
     /** Get the labels: one per example.  The distribution will have the same
         length as example_count. */
-    const vector<Label> & get_labels();
+    const vector<Label> & get_labels() const;
 
     /** Map the labels from something else onto our examples.  The distribution
         will have the same length as examples.size().  The labels are sorted in
@@ -200,7 +200,7 @@ struct Dataset_Index::Index_Entry {
     */
     const vector<Label> &
     get_mapped_labels(const vector<Label> & labels, const Feature & feature,
-                      Sort_By sort_by);
+                      Sort_By sort_by) const;
 
 
     /*************************************************************************/
@@ -251,9 +251,9 @@ struct Dataset_Index::Index_Entry {
            (rather than be in buckets all by themselves).
     */
 
-    const Bucket_Info & create_buckets(size_t num_buckets);
+    const Bucket_Info & create_buckets(size_t num_buckets) const;
 
-    const Bucket_Info & buckets(size_t num_buckets);
+    const Bucket_Info & buckets(size_t num_buckets) const;
 };
 
 } // namespace ML
