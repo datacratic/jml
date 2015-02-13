@@ -366,6 +366,12 @@ dist(const Feature & feature, Sort_By sort_by, unsigned content,
     const unsigned * examples = 0;
     const float * values = 0;
 
+    if (!getItl()->index.count(feature)) {
+        // Unknown feature
+        return Joint_Index(values, buckets, labels, examples, counts, divisors,
+                           0, bucket_splits);
+    }
+
     if (getFeatureIndex(feature).seen == 0) // unknown feature...
         return Joint_Index(values, buckets, labels, examples, counts, divisors,
                            0, bucket_splits);
