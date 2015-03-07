@@ -940,9 +940,9 @@ private:
     using Base::dereference;
     ConstKeyBucket & dereference(ssize_t bucket)
     {
-        if (bucket < 0 || bucket > this->capacity())
+        if (bucket < -1 || bucket > this->capacity())
             throw Exception("dereferencing invalid iterator");
-        if (!this->storage_[bucket].first) {
+        if (bucket != -1 && !this->storage_[bucket].first) {
             using namespace std;
             cerr << "bucket = " << bucket << endl;
             dump(cerr);
