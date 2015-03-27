@@ -32,6 +32,7 @@
 #include <boost/lexical_cast.hpp>
 #include "jml/arch/exception.h"
 #include "jml/arch/format.h"
+#include "jml/arch/threads.h"
 #include "string_functions.h"
 #include <errno.h>
 #include <sstream>
@@ -119,8 +120,9 @@ filter_ostream::
     try {
         close();
     }
-    catch (...) {
-        cerr << "~filter_ostream: ignored exception\n";
+    catch (const std::exception & exc) {
+        cerr << ("~filter_ostream: ignored exception: "
+                 + string(exc.what()) + "\n");
     }
 }
 
@@ -427,9 +429,11 @@ void
 filter_ostream::
 close()
 {
+    bool wasClosed(true); // closed when "close" is called
     if (stream) {
         boost::iostreams::flush(*stream);
         boost::iostreams::close(*stream);
+        wasClosed = false;
     }
     exceptions(ios::goodbit);
     rdbuf(0);
@@ -437,6 +441,11 @@ close()
     sink.reset();
     options.clear();
     if (deferredFailure) {
+        if (wasClosed) {
+            cerr << (to_string(getpid()) + "/" + to_string(gettid())
+                     + ": filter_ostream: a deferred failure has been reported"
+                     " for a closed stream\n");
+        }
         deferredFailure = false;
         exceptions(ios::badbit | ios::failbit);
         setstate(ios::badbit);
@@ -488,8 +497,9 @@ filter_istream::
     try {
         close();
     }
-    catch (...) {
-        cerr << "~filter_istream: ignored exception\n";
+    catch (const std::exception & exc) {
+        cerr << ("~filter_istream: ignored exception: "
+                 + string(exc.what()) + "\n");
     }
 }
 
