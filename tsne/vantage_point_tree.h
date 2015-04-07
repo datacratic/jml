@@ -378,6 +378,13 @@ struct VantagePointTreeT {
     {
         if (!node)
             return nullptr;
+
+        if (!node->clump.empty()) {
+            ExcAssert(!node->inside);
+            ExcAssert(!node->outside);
+            return new VantagePointTreeT(node->items, node->radius, node->clump);
+        }
+
         std::unique_ptr<VantagePointTreeT> inside(deepCopy(node->inside.get()));
         std::unique_ptr<VantagePointTreeT> outside(deepCopy(node->outside.get()));
         return new VantagePointTreeT(node->items, node->radius,
@@ -387,20 +394,22 @@ struct VantagePointTreeT {
     size_t memusage() const
     {
         return sizeof(*this)
+            + sizeof(Item) * items.size()
+            + sizeof(Item) * clump.size()
             + (inside ? inside->memusage() : 0)
             + (outside ? outside->memusage() : 0);
     }
 
     void serialize(DB::Store_Writer & store) const
     {
-        store << items << radius;
+        store << items << radius << clump;
         serializePtr(store, inside.get());
         serializePtr(store, outside.get());
     }
 
     void reconstitute(DB::Store_Reader & store)
     {
-        store >> items >> radius;
+        store >> items >> radius >> clump;
         inside.reset(reconstitutePtr(store));
         outside.reset(reconstitutePtr(store));
     }
