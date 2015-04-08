@@ -1539,8 +1539,13 @@ operator () (int x1, int x2) const
         return 0.0f;
     if (x2 < x1)
         std::swap(x1, x2);
-    return sqrtf(sum_dist[x1] + sum_dist[x2]
-                 -2.0f * SIMD::vec_dotprod_dp(&coords[x1][0], &coords[x2][0], nd));
+    
+    float dist = sum_dist[x1] + sum_dist[x2]
+        -2.0f * SIMD::vec_dotprod_dp(&coords[x1][0], &coords[x2][0], nd);
+    if (dist < 0.0f)
+        dist = 0.0f;
+
+    return sqrtf(dist);
 }
 
 // Object we keep around to calculate the repulsive force, by iterating over the
