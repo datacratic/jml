@@ -271,8 +271,11 @@ struct RingBufferSRMW : public RingBufferBase<Request> {
             // What position would the read position be in if the buffer was
             // full?  
             unsigned fullReadPosition = (writePosition + 1) % bufferSize;
-            if (readPosition == fullReadPosition)
+            if (readPosition == fullReadPosition) {
+                guard.unlock();
                 ML::futex_wait(readPosition, fullReadPosition);
+                guard.lock();
+            }
             else break;
         }
                        
