@@ -15,7 +15,6 @@ LIBUTILS_SOURCES := \
 	lz4.c \
 	lz4hc.c \
 	floating_point.cc \
-	json_parsing.cc \
 	rng.cc \
 	hash.cc \
 	abort.cc

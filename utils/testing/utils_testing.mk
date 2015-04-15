@@ -12,4 +12,3 @@ filter_streams_test: lz4cli
 $(eval $(call test,csv_parsing_test,arch utils,boost))
 
 $(eval $(call test,worker_task_test,worker_task ACE arch boost_thread pthread,boost))
-$(eval $(call test,json_parsing_test,utils arch,boost))
