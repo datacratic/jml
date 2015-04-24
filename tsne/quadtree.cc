@@ -45,7 +45,7 @@ serialize(DB::Store_Writer & store) const
 
 QuadtreeNode::
 QuadtreeNode(DB::Store_Reader & store, int version)
-    : diag(0.0), type(EMPTY), numChildren(0), recipNumChildren({0, 0})
+    : diag(0.0), type(EMPTY), numChildren(0), recipNumChildren{0, 0}
 {
     if (version != 0)
         throw ML::Exception("Unknown quadtree node version");
