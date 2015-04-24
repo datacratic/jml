@@ -158,6 +158,10 @@ struct VantagePointTreeT {
             std::vector<std::pair<float, Item> > sorted;
             sorted.reserve(objectsToInsert.size());
             for (unsigned i = 0;  i < objectsToInsert.size();  ++i) {
+                if (!isfinite(distances[i])) {
+                    using namespace std;
+                    cerr << "distances = " << distances << endl;
+                }
                 ExcAssert(isfinite(distances[i]));
                 sorted.emplace_back(distances[i], objectsToInsert[i]);
             }
@@ -285,6 +289,8 @@ struct VantagePointTreeT {
                       int n,
                       float maximumDist) const
     {
+        using namespace std;
+
         std::vector<std::pair<float, Item> > result;
 
         // Add the results to the current set of nearest neighbours
@@ -304,6 +310,10 @@ struct VantagePointTreeT {
         // First, find the distance to the object at this node
         float pivotDistance = distance(items.at(0));
         
+        //cerr << "search for " << pivotDistance << " maximumDist " << maximumDist
+        //     << " inside " << !!inside << " outside " << !!outside
+        //     << " clump " << clump.size() << endl;
+
         if (pivotDistance <= maximumDist) {
             for (auto & item: items)
                 result.emplace_back(pivotDistance, item);
@@ -327,6 +337,9 @@ struct VantagePointTreeT {
                     clumpResult.emplace_back(dist, i);
                 }
             }
+
+            //cerr << "adding " << clumpResult.size() << " clump results" << " to "
+            //     << result.size() << " existing" << endl;
 
             addResults(clumpResult);
 

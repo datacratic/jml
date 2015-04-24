@@ -51,6 +51,9 @@ struct QuadtreeNode {
         diag = diagonalLength();
     }
 
+    QuadtreeNode(DB::Store_Reader & store,
+                 int version);
+
     ~QuadtreeNode()
     {
         for (auto & q: quadrants)
@@ -279,7 +282,7 @@ struct QuadtreeNode {
     }
 
     void serialize(DB::Store_Writer & store) const;
-    void reconstitute(DB::Store_Reader & store);
+    void reconstitute(DB::Store_Reader & store, int version);
 };
 
 struct Quadtree {
@@ -288,6 +291,8 @@ struct Quadtree {
     {
         root.reset(new QuadtreeNode(mins, maxs));
     }
+
+    Quadtree(DB::Store_Reader & store);
 
     void insert(QCoord coord)
     {
