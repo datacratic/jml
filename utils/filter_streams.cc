@@ -485,7 +485,7 @@ close()
     stream.reset();
     sink.reset();
     options.clear();
-    if (hasDeferredFailure) {
+    if (hasDeferredFailure()) {
         if (wasClosed) {
             cerr << (to_string(getpid()) + "/" + to_string(gettid())
                      + ": filter_ostream: a deferred failure has been reported"
