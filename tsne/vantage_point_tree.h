@@ -163,6 +163,7 @@ struct VantagePointTreeT {
                     cerr << "distances = " << distances << endl;
                 }
                 ExcAssert(isfinite(distances[i]));
+                ExcAssertGreaterEqual(distances[i], 0.0);
                 sorted.emplace_back(distances[i], objectsToInsert[i]);
             }
 
@@ -174,6 +175,14 @@ struct VantagePointTreeT {
             while (firstNonZero < sorted.size() && sorted[firstNonZero].first == 0.0) {
                 items.push_back(sorted[firstNonZero].second);
                 ++firstNonZero;
+            }
+
+            if (items.size() == 0) {
+                for (auto & s: sorted) {
+                    cerr << s.first << "," << s.second << "  ";
+                }
+                cerr << endl;
+                //cerr << "sorted = " << sorted << endl;
             }
 
             ExcAssertGreaterEqual(items.size(), 1);
