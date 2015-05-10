@@ -200,3 +200,41 @@ BOOST_AUTO_TEST_CASE(test_set)
 }
 
 #endif
+
+BOOST_AUTO_TEST_CASE(test_insert_guard_object)
+{
+
+    int nobj = 100;
+
+    ML::Lightweight_Hash<int, int> h;
+        
+    for (unsigned j = 0;  j < nobj;  ++j) {
+        BOOST_CHECK_EQUAL(h.size(), j);
+        h.insert({j, j});
+        BOOST_CHECK_EQUAL(h.size(), j + 1);
+        int i = 0;
+        for (auto & o: h) {
+            BOOST_CHECK_EQUAL(o.first, i);
+            BOOST_CHECK_EQUAL(o.second, i);
+            ++i;
+        }
+    }
+
+    h.clear();
+    BOOST_CHECK_EQUAL(h.size(), 0);
+    BOOST_CHECK_EQUAL(std::distance(h.begin(), h.end()), 0);
+
+
+    for (int j = 100;  j >= 0;  --j) {
+        BOOST_CHECK_EQUAL(h.size(), 100 - j);
+        h.insert({j, j});
+        BOOST_CHECK_EQUAL(h.size(), 101 - j);
+        int i = j;
+        for (auto & o: h) {
+            BOOST_CHECK_EQUAL(o.first, i);
+            BOOST_CHECK_EQUAL(o.second, i);
+            ++i;
+        }
+    }
+}
+
