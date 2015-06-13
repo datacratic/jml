@@ -65,18 +65,19 @@ struct Thread_Specific {
 
     JML_ALWAYS_INLINE Contained * operator -> () const
     {
+        return get();
+    }
+
+    JML_ALWAYS_INLINE Contained * get(bool * hadInfo = nullptr) const
+    {
+        if (hadInfo) *hadInfo = ptr_;
         if (!ptr_) create();
         return ptr_;
     }
 
-    JML_ALWAYS_INLINE Contained * get() const
-    {
-        return operator -> ();
-    }
-
     JML_ALWAYS_INLINE Contained & operator * () const
     {
-        return * operator -> ();
+        return * get();
     }
 
     struct Deleter {
@@ -203,32 +204,32 @@ struct ThreadSpecificInstanceInfo
         freeIndexes.push_back(index);
     }
 
-    static PerThreadInfo * getThisThread()
+    static PerThreadInfo * getThisThread(bool * hadThreadInfo = nullptr)
     {
-        return staticInfo.get();
+        return staticInfo.get(hadThreadInfo);
     }
 
-    T * get(PerThreadInfo * & info) const
+    T * get(PerThreadInfo * & info, bool * hadInfo = nullptr) const
     {
         if (!info) info = staticInfo.get();
-        return load(info);
+        return load(info, hadInfo);
     }
 
-    T * get(PerThreadInfo * const & info) const
+    T * get(PerThreadInfo * const & info, bool * hadInfo = nullptr) const
     {
-        load(info);
+        load(info, hadInfo);
     }
 
     /** Return the data for this thread for this instance of the class. */
-    T * get() const
+    T * get(bool * hadInfo = nullptr) const
     {
         PerThreadInfo * info = staticInfo.get();
-        return load(info);
+        return load(info, hadInfo);
     }
 
 private:
 
-    T * load(PerThreadInfo * info) const
+    T * load(PerThreadInfo * info, bool * hadInfo) const
     {
         while (info->size() <= index)
             info->emplace_back();
@@ -236,9 +237,15 @@ private:
         Value& val = (*info)[index];
 
         if (JML_UNLIKELY(!val.object)) {
+            if (hadInfo)
+                *hadInfo = false;
             val.construct(const_cast<ThreadSpecificInstanceInfo*>(this));
             std::lock_guard<Lock> guard(freeSetLock);
             freeSet.insert(&val);
+        }
+        else {
+            if (hadInfo)
+                *hadInfo = true;
         }
 
         return &val.storage.value;
