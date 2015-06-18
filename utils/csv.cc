@@ -14,24 +14,30 @@ using namespace std;
 
 namespace ML {
 
+namespace {
+static const string literalDoubleQuote("\"\"");
+} // file scope
+
 std::string expect_csv_field(Parse_Context & context, bool & another,
                              char separator)
 {
     bool quoted = false;
     std::string result;
+    result.reserve(128);
     another = false;
     
     while (context) {
         //cerr << "at character '" << *context << "' quoted = " << quoted
         //     << endl;
 
-        if (context.get_line() == 9723 && false)
+        if (false && context.get_line() == 9723)
             cerr << "*context = " << *context << " quoted = " << quoted
                  << " result = " << result << endl;
         
         if (quoted) {
-            if (context.match_literal("\"\"")) {
-                result += "\"";
+
+            if (context.match_literal(literalDoubleQuote)) {
+                result += '\"';
                 continue;
             }
             if (context.match_literal('\"')) {
@@ -73,7 +79,7 @@ std::string expect_csv_field(Parse_Context & context, bool & another,
     if (quoted)
         throw Exception("file finished inside quote");
 
-    return result;
+    return std::move(result);
 }
 
 std::vector<std::string>
@@ -86,10 +92,11 @@ expect_csv_row(Parse_Context & context, int length, char separator)
     vector<string> result;
     if (length != -1)
         result.reserve(length);
+    else result.reserve(16);
 
     bool another = false;
     while (another || (context && !context.match_eol())) {
-        result.push_back(expect_csv_field(context, another, separator));
+        result.emplace_back(std::move(expect_csv_field(context, another, separator)));
         //cerr << "read " << result.back() << " another = " << another << endl;
     }
 
@@ -99,7 +106,7 @@ expect_csv_row(Parse_Context & context, int length, char separator)
     
     //cerr << "returning result" << endl;
 
-    return result;
+    return std::move(result);
 }
 
 std::string csv_escape(const std::string & s)
