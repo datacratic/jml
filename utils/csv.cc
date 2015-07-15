@@ -95,7 +95,7 @@ expect_csv_row(Parse_Context & context, int length, char separator)
     else result.reserve(16);
 
     bool another = false;
-    while (another || (context && !context.match_eol())) {
+    while (another || (context && !context.match_eol() && *context != '\r')) {
         result.emplace_back(std::move(expect_csv_field(context, another, separator)));
         //cerr << "read " << result.back() << " another = " << another << endl;
     }
