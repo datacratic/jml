@@ -26,6 +26,8 @@ std::string jsonEscape(const std::string & str);
 
 void jsonEscape(const std::string & str, std::ostream & out);
 
+void jsonEscape(const std::string & str, std::string & out);
+
 /*
  * If non-ascii characters are found an exception is thrown
  */

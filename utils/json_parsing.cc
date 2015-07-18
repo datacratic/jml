@@ -92,6 +92,20 @@ void jsonEscape(const std::string & str, std::ostream & stream)
     stream.write(buf, p - buf);
 }
 
+void jsonEscape(const std::string & str, std::string & out)
+{
+    size_t sz = str.size() * 4 + 4;
+    char buf[sz];
+    char * p = buf, * end = buf + sz;
+
+    p = jsonEscapeCore(str, p, end);
+
+    if (!p)
+        throw ML::Exception("To fix: logic error in JSON escaping");
+
+    out.append(buf, p - buf);
+}
+
 bool matchJsonString(Parse_Context & context, std::string & str)
 {
     Parse_Context::Revert_Token token(context);
