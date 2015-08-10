@@ -565,6 +565,7 @@ void calc_stats_regression(const Classifier_Impl & current,
 }
 
 void remove_aliased_examples(Training_Data & data, const Feature & predicted,
+                             const set<Feature> & to_ignore,
                              int verbosity, bool profile)
 {
     /** Clean the dataset by removing those examples which are aliased (where
@@ -572,7 +573,7 @@ void remove_aliased_examples(Training_Data & data, const Feature & predicted,
     boost::timer timer;
     
     /* Check for aliased rows in the training data. */
-    vector<Alias> aliases = remove_aliases(data, predicted);
+    vector<Alias> aliases = remove_aliases(data, predicted, to_ignore);
     int inhomogenous = 0;
     int aliased = 0;
     for (unsigned i = 0;  i < aliases.size();  ++i) {
@@ -610,6 +611,7 @@ void do_features(const Training_Data & data,
                  vector<string> optional_features,
                  int min_feature_count, int verbosity,
                  std::vector<Feature> & features,
+                 std::set<Feature> & ignored_features,
                  Feature & predicted,
                  std::map<std::string, Feature> & feature_index,
                  vector<string> type_overrides)
@@ -640,7 +642,7 @@ void do_features(const Training_Data & data,
     Feature_Info predicted_info = feature_space->info(predicted);
 
     /* Ignore variables, if asked. */
-    int ignored_features = 0;
+    int num_ignored_features = 0;
     if (ignore_features.size()) {
         /* Get the names of all that are ignored.  These might be regexes, so
            we also have to search through with these regexes. */
@@ -678,6 +680,7 @@ void do_features(const Training_Data & data,
                     if ((match && !negative) || (!match && negative)) {
                         std::swap(features[j], features.back());
                         std::swap(feature_names[j], feature_names.back());
+                        ignored_features.insert(std::move(features.back()));
                         features.pop_back();
                         feature_names.pop_back();
                         --j;
@@ -690,7 +693,7 @@ void do_features(const Training_Data & data,
                 else if (verbosity > 0 && matched == 0)
                     cerr << "warning: regex '" << ignore_features[i]
                          << "' matched no features" << endl;
-                ignored_features += matched;
+                num_ignored_features += matched;
             }
         }
     }
@@ -757,7 +760,7 @@ void do_features(const Training_Data & data,
 
     cerr << format("%d/%d/%d/%zd total/ignored/< %d examples/remaining "
                    "features",
-                   total_features, ignored_features, no_data_features,
+                   total_features, num_ignored_features, no_data_features,
                    features.size(), min_feature_count) << endl;
 
     guess_all_info(data, *feature_space, true);

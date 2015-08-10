@@ -11,6 +11,7 @@
 
 #include "jml/stats/sparse_distribution.h"
 #include <vector>
+#include <set>
 #include <string>
 #include <boost/shared_ptr.hpp>
 #include <boost/tuple/tuple.hpp>
@@ -57,6 +58,7 @@ void calc_stats_regression(const Classifier_Impl & current,
 /** Clean the dataset by removing those examples which are aliased (where
     the features are the same). */
 void remove_aliased_examples(Training_Data & data, const Feature & predicted,
+                             const std::set<Feature> & to_ignore,
                              int verbosity, bool profile);
 
 /** Get a list of features and an index, from the full specifications. */
@@ -67,6 +69,7 @@ void do_features(const Training_Data & data,
                  std::vector<std::string> optional_features,
                  int min_feature_count, int verbosity,
                  std::vector<Feature> & features,
+                 std::set<Feature> & ignored_features,
                  Feature & predicted,
                  std::map<std::string, Feature> & feature_index,
                  std::vector<std::string> type_overrides

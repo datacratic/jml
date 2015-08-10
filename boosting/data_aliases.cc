@@ -21,7 +21,8 @@ using namespace std;
 namespace ML {
 
 std::vector<Alias>
-aliases(const ML::Training_Data & dataset, const Feature & predicted)
+aliases(const ML::Training_Data & dataset, const Feature & predicted,
+        const set<Feature> & to_ignore)
 {
     Timer timer;
 
@@ -36,7 +37,11 @@ aliases(const ML::Training_Data & dataset, const Feature & predicted)
                 float value;
                 std::tie(feat, value) = f;
                 
+                // skip if it's the target
                 if (feat == predicted)
+                    continue;
+                // also skip if we were asked to ignore that feature
+                if (to_ignore.count(feat))
                     continue;
 
                 //printed += dataset.feature_space()->print(feat, value);
@@ -79,6 +84,9 @@ aliases(const ML::Training_Data & dataset, const Feature & predicted)
 
     uint64_t comparisons = 0, nontrivialComparisons = 0;
 
+    set<Feature> to_ignore2(to_ignore);
+    to_ignore2.insert(predicted);
+
     auto compareExamples = [&] (const std::tuple<int, uint64_t, float> & ex1,
                                 const std::tuple<int, uint64_t, float> & ex2)
         -> int
@@ -99,7 +107,7 @@ aliases(const ML::Training_Data & dataset, const Feature & predicted)
             auto fv1 = dataset.get(std::get<0>(ex1));
             auto fv2 = dataset.get(std::get<0>(ex2));
 
-            int res = fv1->compare(*fv2, predicted);
+            int res = fv1->compare(*fv2, to_ignore2);
 
             if (res == -1)
                 return -1;
@@ -206,10 +214,11 @@ remove_aliases(ML::Training_Data & dataset,
 
 std::vector<Alias>
 remove_aliases(ML::Training_Data & dataset, const Feature & predicted,
+               const set<Feature> & to_ignore,
                bool homogenous,
                std::vector<int> * mapping)
 {
-    vector<Alias> aliased = aliases(dataset, predicted);
+    vector<Alias> aliased = aliases(dataset, predicted, to_ignore);
     remove_aliases(dataset, aliased, homogenous, mapping);
     return aliased;
 }

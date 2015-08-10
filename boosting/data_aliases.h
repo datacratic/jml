@@ -20,8 +20,10 @@ struct Alias {
 };
 
 /** Returns a list of examples that are aliased. */
-std::vector<Alias> aliases(const ML::Training_Data & dataset,
-                           const Feature & predicted);
+std::vector<Alias> aliases(
+    const ML::Training_Data & dataset,
+    const Feature & predicted,
+    const std::set<Feature> & to_ignore = std::set<Feature>());
 
 /** Remove the aliased examples.  This will go through and remove
     all of the non-homogenous examples from the list, and if
@@ -50,6 +52,7 @@ int remove_aliases(ML::Training_Data & dataset,
 std::vector<Alias>
 remove_aliases(ML::Training_Data & dataset,
                const Feature & predicted,
+               const std::set<Feature> & to_ignore = std::set<Feature>(),
                bool homogenous = false,
                std::vector<int> * mapping = 0);
 

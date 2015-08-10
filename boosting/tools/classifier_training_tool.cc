@@ -253,6 +253,7 @@ try
         = datasets.feature_space;
 
     vector<Feature> features;
+    set<Feature> ignored_features;
     map<string, Feature> feature_index;
     Feature predicted;
 
@@ -274,7 +275,7 @@ try
 
     do_features(*datasets.data[first_nonempty], feature_space, predicted_name,
                 ignore_features, optional_features,
-                min_feature_count, verbosity, features,
+                min_feature_count, verbosity, features, ignored_features,
                 predicted, feature_index, type_overrides);
 
     generator->init(feature_space, predicted);
@@ -319,9 +320,10 @@ try
     datasets.split(training_split, validation_split, testing_split,
                    randomize_order, group_feature, testing_filter);
     
+    
     if (remove_aliased)
-        remove_aliased_examples(*datasets.training, predicted, verbosity,
-                                profile);
+        remove_aliased_examples(*datasets.training, predicted,
+                                ignored_features, verbosity, profile);
         
     Feature_Transformer transformer;
     if (!transformations.empty()) {

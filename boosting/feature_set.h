@@ -17,6 +17,7 @@
 #include "jml/db/persistent.h"
 #include "jml/stats/distribution.h"
 #include <vector>
+#include <set>
 #include "jml/utils/floating_point.h"
 #include "jml/utils/string_functions.h"
 #include "jml/utils/sgi_algorithm.h"
@@ -290,13 +291,24 @@ public:
     */
     int compare(const Feature_Set & other, const Feature & to_ignore) const
     {
+        return compare(other, std::set<Feature>({to_ignore}));
+    }
+
+    int compare(const Feature_Set & other, const std::set<Feature> & to_ignore) const
+    {
         const_iterator it1 = begin(), e1 = end();
         const_iterator it2 = other.begin(), e2 = other.end();
 
         while (it1 != e1 && it2 != e2) {
-            /* Skip any that match the ignored feature. */
-            if ((*it1).first == to_ignore) { ++it1;  continue; }
-            if ((*it2).first == to_ignore) { ++it2;  continue; }
+            /* Skip any that match the ignored features. */
+            if (to_ignore.count((*it1).first)) {
+                ++it1;
+                continue;
+            }
+            if (to_ignore.count((*it2).first)) {
+                ++it2;
+                continue;
+            }
             
             if (*it1 < *it2) return -1;
             else if (*it2 < *it1) return 1;
@@ -306,8 +318,8 @@ public:
         }
 
         /* Skip any examples at the end. */
-        while (it1 != e1 && (*it1).first == to_ignore) ++it1;
-        while (it2 != e2 && (*it2).first == to_ignore) ++it2;
+        while (it1 != e1 && to_ignore.count((*it1).first)) ++it1;
+        while (it2 != e2 && to_ignore.count((*it2).first)) ++it2;
         
         if (it2 == e2) return it1 != e1;
         
