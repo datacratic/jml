@@ -79,6 +79,7 @@ BOOST_AUTO_TEST_CASE( test_page_info )
     cerr << "code_pi  = " << code_pi[0] << endl;
 }
 
+#if 0
 BOOST_AUTO_TEST_CASE( test_pagemap_reader )
 {
     int npages = 10;
@@ -166,3 +167,4 @@ BOOST_AUTO_TEST_CASE( test_pagemap_reader )
 
     BOOST_CHECK_EQUAL(num_open_files(), nfiles_before);
 }
+#endif
