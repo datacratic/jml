@@ -12,6 +12,12 @@
 using namespace std;
 
 
+namespace {
+
+const size_t stackBufferMaxSize = 1 << 20; /* 1Mbytes */
+
+}
+
 namespace ML {
 
 /*****************************************************************************/
@@ -66,30 +72,50 @@ char * jsonEscapeCore(const std::string & str, char * p, char * end)
 std::string
 jsonEscape(const std::string & str)
 {
+    string result;
     size_t sz = str.size() * 4 + 4;
-    char buf[sz];
-    char * p = buf, * end = buf + sz;
 
-    p = jsonEscapeCore(str, p, end);
+    result.reserve(sz);
+    char * buf = &result[0];
+    char * end = buf + sz;
 
-    if (!p)
+    char * realEnd = jsonEscapeCore(str, p, end);
+    if (!realEnd)
         throw ML::Exception("To fix: logic error in JSON escaping");
 
-    return string(buf, p);
+    size_t realSz = realEnd - buf;
+    result.resize(realSz);
+
+    return result;
 }
 
 void jsonEscape(const std::string & str, std::ostream & stream)
 {
     size_t sz = str.size() * 4 + 4;
-    char buf[sz];
-    char * p = buf, * end = buf + sz;
 
-    p = jsonEscapeCore(str, p, end);
+    if (sz < stackBufferMaxSize) {
+        char buf[sz];
+        char * p = buf, * end = buf + sz;
 
-    if (!p)
-        throw ML::Exception("To fix: logic error in JSON escaping");
+        p = jsonEscapeCore(str, p, end);
 
-    stream.write(buf, p - buf);
+        if (!p)
+            throw ML::Exception("To fix: logic error in JSON escaping");
+
+        stream.write(buf, p - buf);
+    }
+    else {
+        string buffer;
+        buffer.reserve(sz);
+        char * buf = &buffer[0];
+        char * p = buf, * end = buf + sz;
+        p = jsonEscapeCore(str, p, end);
+
+        if (!p)
+            throw ML::Exception("To fix: logic error in JSON escaping");
+
+        stream.write(buf, p - buf);
+    }
 }
 
 bool matchJsonString(Parse_Context & context, std::string & str)
