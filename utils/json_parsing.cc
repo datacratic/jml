@@ -79,7 +79,7 @@ jsonEscape(const std::string & str)
     char * buf = &result[0];
     char * end = buf + sz;
 
-    char * realEnd = jsonEscapeCore(str, p, end);
+    char * realEnd = jsonEscapeCore(str, buf, end);
     if (!realEnd)
         throw ML::Exception("To fix: logic error in JSON escaping");
 
