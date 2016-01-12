@@ -156,16 +156,7 @@ apply_weight_spec(const Training_Data & data, const Weight_Spec & spec_)
 
         if (spec.type == Weight_Spec::BY_VALUE) {
             float value = it->value();
-            if (value == 0.0) {
-#if 0 // not a problem after all
-                cerr << "warning: using zero value as weight; changed to 1.0 "
-                     << "for feature " << spec.feature << " in example "
-                     << it->example()
-                     << endl;
-                value = 1.0;
-#endif // not a problem
-            }
-            else if (!finite(value))
+            if (!finite(value))
                 throw Exception("apply_weight_spec: non-finite value "
                                 + ostream_format(value) + " in weight feature "
                                 + data.feature_space()->print(spec.feature)
@@ -213,44 +204,6 @@ apply_weight_spec(const Training_Data & data, const Weight_Spec & spec_)
         total = result.size();
     }
     else if (total == 0.0 && data.example_count() > 0) {
-        cerr << "spec: (" << data.feature_space()->print(spec.feature)
-             << ", " << spec.beta << ", " << spec.group_feature << ", "
-             << (spec.type == Weight_Spec::BY_FREQUENCY
-                 ? "BY_FREQUENCY" : "BY_VALUE")
-             << ")"
-             << endl;
-
-        if (spec.type != Weight_Spec::BY_VALUE) {
-            for (map<float, float>::const_iterator it = spec.weights.begin();
-                 it != spec.weights.end();  ++it) {
-                cerr << "  value "
-                     << data.feature_space()->print(spec.feature, it->first)
-                     << " has weight " << it->second << endl;
-            }
-            cerr << "  missing weight = " << spec.missing_weight << endl;
-        }
-
-        for (Index_Iterator it = index.begin();  it != index.end();  ++it) {
-            cerr << "example " << it->example() << " value "
-                 << it->value();
-            float value;
-            if (spec.type == Weight_Spec::BY_VALUE)
-                value = it->value();
-            else {
-                if (!it->missing()) {
-                    map<float, float>::const_iterator pos
-                        = spec.weights.find(it->value());
-                    if (pos == spec.weights.end()) value = 0.0;
-                    else value = pos->second / it->example_counts();
-                }
-                else value = spec.missing_weight / it->example_counts();
-            }
-            cerr << " weight = " << value << endl;
-        }
-
-        //cerr << "dataset: " << endl;
-        //data.dump(cerr);
-
         throw Exception("apply_weight_spec: no values had any weight");
     }
     
