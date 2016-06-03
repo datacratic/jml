@@ -1,4 +1,4 @@
-$(eval $(call test,tick_counter_test,arch,boost))
+$(eval $(call test,tick_counter_test,arch,boost manual))
 $(eval $(call test,bitops_test,arch,boost))
 $(eval $(call test,cpuid_test,arch,boost))
 $(eval $(call test,futex_test,arch,boost))
