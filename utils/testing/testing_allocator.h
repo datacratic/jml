@@ -15,8 +15,6 @@
 
 namespace ML {
 
-using namespace std;
-
 struct Testing_Allocator_Data {
     
     Testing_Allocator_Data()

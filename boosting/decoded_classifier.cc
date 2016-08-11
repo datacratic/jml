@@ -12,7 +12,7 @@
 #include "config_impl.h"
 
 using namespace std;
-using namespace DB;
+using namespace ML::DB;
 
 
 

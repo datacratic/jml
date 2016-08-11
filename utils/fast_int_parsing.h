@@ -26,8 +26,6 @@
 #include "jml/utils/parse_context.h"
 #include <iostream>
 
-using namespace std;
-
 
 namespace ML {
 

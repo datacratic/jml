@@ -22,10 +22,8 @@
 #include "jml/math/xdiv.h"
 #include "jml/utils/filter_streams.h"
 
-
 using namespace std;
-using namespace DB;
-
+using namespace ML::DB;
 
 
 namespace ML {

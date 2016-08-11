@@ -13,13 +13,13 @@
 #include <boost/test/unit_test.hpp>
 #include "jml/arch/demangle.h"
 
-using namespace ML;
-using namespace ML::DB;
-using namespace std;
-
 template<typename X>
 void test_serialize_reconstitute(const X & x)
 {
+    using namespace std;
+    using namespace ML;
+    using namespace ML::DB;
+
     ostringstream stream_out;
 
     {
@@ -72,6 +72,10 @@ void test_serialize_reconstitute(const X & x)
 template<typename Base, typename X>
 void test_poly_serialize_reconstitute(const X & x)
 {
+    using namespace std;
+    using namespace ML;
+    using namespace ML::DB;
+
     ostringstream stream_out;
 
     {

@@ -52,8 +52,6 @@ extern const uint8_t j__L_LeafWOffset[];
 
 namespace ML {
 
-using namespace std;
-
 template<class Base, class Value>
 struct judy_iterator : public Base {
     typedef std::bidirectional_iterator_tag iterator_category;

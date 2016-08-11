@@ -21,8 +21,6 @@
 namespace ML {
 namespace CUDA {
 
-using namespace std;
-
 template<typename D>
 struct DeviceData {
     DeviceData()

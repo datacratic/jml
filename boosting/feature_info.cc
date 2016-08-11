@@ -20,7 +20,7 @@ using namespace std;
 
 namespace ML {
 
-using namespace DB;
+using namespace ML::DB;
 
 
 const Feature_Info MISSING_FEATURE_INFO(INUTILE);

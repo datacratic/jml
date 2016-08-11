@@ -24,9 +24,12 @@ F sign(F val)
 } // file scope
 
 template<class Float, class Layer, class Float2>
-void bprop_test(Layer & layer, const distribution<Float2> & input_,
+void bprop_test(Layer & layer, const ML::distribution<Float2> & input_,
                 double epsilon, double tolerance)
 {
+    using namespace std;
+    using namespace ML;
+
     // If we set the derror/doutput to 1 for one output and to zero for the
     // rest, then the error calculated should equal the change in that output
     // per unit change in the parameter.  We can use this to test all of the
@@ -242,8 +245,12 @@ double get_epsilon(double)
 }
 
 template<class Float, class Layer>
-void bprop_test(Layer & layer, Thread_Context & context, double tolerance = -1.0)
+void bprop_test(Layer & layer, ML::Thread_Context & context,
+                double tolerance = -1.0)
 {
+    using namespace std;
+    using namespace ML;
+
     int ni = layer.inputs(), no = layer.outputs();
 
     BOOST_REQUIRE(ni > 0);
@@ -265,8 +272,12 @@ void bprop_test(Layer & layer, Thread_Context & context, double tolerance = -1.0
 }
 
 template<class Float, class Layer>
-void bprop_test_backward(Layer & layerfwd, Thread_Context & context, double tolerance = -1.0)
+void bprop_test_backward(Layer & layerfwd, ML::Thread_Context & context,
+                         double tolerance = -1.0)
 {
+    using namespace std;
+    using namespace ML;
+
     Reverse_Layer_Adaptor layer(make_unowned_sp(layerfwd));
 
     int ni = layer.inputs(), no = layer.outputs();
@@ -290,8 +301,12 @@ void bprop_test_backward(Layer & layerfwd, Thread_Context & context, double tole
 }
 
 template<class Float, class Layer>
-void bprop_test_reconstruct(Layer & layerfwd, Thread_Context & context, double tolerance = -1.0)
+void bprop_test_reconstruct(Layer & layerfwd, ML::Thread_Context & context,
+                            double tolerance = -1.0)
 {
+    using namespace std;
+    using namespace ML;
+
     Reconstruct_Layer_Adaptor layer(make_unowned_sp(layerfwd));
 
     int ni = layer.inputs(), no = layer.outputs();
@@ -315,9 +330,12 @@ void bprop_test_reconstruct(Layer & layerfwd, Thread_Context & context, double t
 }
 
 template<typename Float, class Layer>
-void bbprop_test(Layer & layer, Thread_Context & context,
+void bbprop_test(Layer & layer, ML::Thread_Context & context,
                  double tolerance = -1.0)
 {
+    using namespace std;
+    using namespace ML;
+
     if (tolerance == -1.0)
         tolerance = get_tolerance(Float());
     
@@ -583,9 +601,10 @@ void bbprop_test(Layer & layer, Thread_Context & context,
 }
 
 template<class Float, class Layer>
-void bbprop_test_backward(Layer & layerfwd, Thread_Context & context, double tolerance = -1.0)
+void bbprop_test_backward(Layer & layerfwd, ML::Thread_Context & context,
+                          double tolerance = -1.0)
 {
-    Reverse_Layer_Adaptor layer(make_unowned_sp(layerfwd));
+    ML::Reverse_Layer_Adaptor layer(make_unowned_sp(layerfwd));
 
     if (tolerance == -1.0)
         tolerance = get_tolerance(Float());
@@ -594,9 +613,10 @@ void bbprop_test_backward(Layer & layerfwd, Thread_Context & context, double tol
 }
 
 template<class Float, class Layer>
-void bbprop_test_reconstruct(Layer & layerfwd, Thread_Context & context, double tolerance = -1.0)
+void bbprop_test_reconstruct(Layer & layerfwd, ML::Thread_Context & context,
+                             double tolerance = -1.0)
 {
-    Reconstruct_Layer_Adaptor layer(make_unowned_sp(layerfwd));
+    ML::Reconstruct_Layer_Adaptor layer(make_unowned_sp(layerfwd));
 
     if (tolerance == -1.0)
         tolerance = get_tolerance(Float());

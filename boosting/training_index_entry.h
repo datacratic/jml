@@ -145,7 +145,7 @@ struct Dataset_Index::Index_Entry {
     Feature_Map<Mapped_Labels_Entry> mapped_labels_sorted;
 
     /** Buckets, one entry for each total number of buckets (cached). */
-    map<unsigned, Bucket_Info> bucket_info;
+    std::map<unsigned, Bucket_Info> bucket_info;
 
 
     /*************************************************************************/
@@ -169,20 +169,20 @@ struct Dataset_Index::Index_Entry {
     /*************************************************************************/
 
     /** Return the values, sorted as specified. */
-    const vector<float> & get_values(Sort_By sort_by);
+    const std::vector<float> & get_values(Sort_By sort_by);
 
     /** Return the example numbers, sorted as specified.  If the vector is
         empty, then the examples count implicitly from one to the highest
         value. */
-    const vector<unsigned> & get_examples(Sort_By sort_by);
+    const std::vector<unsigned> & get_examples(Sort_By sort_by);
 
     /** Get the example counts.  If the vector is empty, then the counts are
         implicitly one every time. */
-    const vector<unsigned> & get_counts(Sort_By sort_by);
+    const std::vector<unsigned> & get_counts(Sort_By sort_by);
 
     /** Get the divisors.  If the vector is empty, then the divisor is
         implicitly one every time. */
-    const vector<float> & get_divisors(Sort_By sort_by);
+    const std::vector<float> & get_divisors(Sort_By sort_by);
 
     /** Get the frequencies.  These are extracted from the values array. */
     const Freqs & get_freqs();
@@ -192,14 +192,15 @@ struct Dataset_Index::Index_Entry {
 
     /** Get the labels: one per example.  The distribution will have the same
         length as example_count. */
-    const vector<Label> & get_labels();
+    const std::vector<Label> & get_labels();
 
     /** Map the labels from something else onto our examples.  The distribution
         will have the same length as examples.size().  The labels are sorted in
         the manner specified.
     */
-    const vector<Label> &
-    get_mapped_labels(const vector<Label> & labels, const Feature & feature,
+    const std::vector<Label> &
+    get_mapped_labels(const std::vector<Label> & labels,
+                      const Feature & feature,
                       Sort_By sort_by);
 
 
