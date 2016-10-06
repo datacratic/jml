@@ -132,7 +132,7 @@ expectJson(Parse_Context & context)
 {
     context.skip_whitespace();
     if (*context == '"')
-        return expectJsonStringAscii(context);
+        return expectJsonStringUTF8(context);
     else if (context.match_literal("null"))
         return Json::Value();
     else if (context.match_literal("true"))
