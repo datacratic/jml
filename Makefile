@@ -4,7 +4,9 @@
 FC=gfortran
 -include local.mk
 
-LOCAL_LIB_DIR?=$(HOME)/local/lib /usr/local/lib
+LOCAL_DIR?=$(HOME)/local
+LOCAL_LIB_DIR?=$(LOCAL_DIR)/lib /usr/local/lib
+LOCAL_INCLUDE_DIR?=$(LOCAL_DIR)/include
 
 default: all
 .PHONY: default
