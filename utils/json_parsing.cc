@@ -5,9 +5,10 @@
    Released under the MIT license.
 */
 
-#include "json_parsing.h"
 #include "jml/arch/format.h"
-
+#include "exc_assert.h"
+#include "parse_context.h"
+#include "json_parsing.h"
 
 using namespace std;
 
@@ -15,6 +16,202 @@ using namespace std;
 namespace {
 
 const size_t stackBufferMaxSize = 1 << 20; /* 1Mbytes */
+
+inline void
+appendUtf8Byte(char * buffer, size_t & pos, uint8_t newChar)
+{
+    *(buffer + pos) = newChar;
+    pos++;
+}
+
+inline bool
+appendUtf8(char * buffer, size_t & pos, size_t bufferSize, uint32_t cp)
+{
+    if (cp < 0x80) {
+        if (pos >= bufferSize) {
+            return false;
+        }
+        appendUtf8Byte(buffer, pos,
+                       static_cast<uint8_t>(cp));
+    }
+    else if (cp < 0x800) {
+        if ((pos + 1) >= bufferSize) {
+            return false;
+        }
+        appendUtf8Byte(buffer, pos,
+                       static_cast<uint8_t>((cp >> 6) | 0xc0));
+        appendUtf8Byte(buffer, pos,
+                       static_cast<uint8_t>((cp & 0x3f) | 0x80));
+    }
+    else if (cp < 0x10000) {
+        if ((pos + 2) >= bufferSize) {
+            return false;
+        }
+        appendUtf8Byte(buffer, pos,
+                       static_cast<uint8_t>((cp >> 12) | 0xe0));
+        appendUtf8Byte(buffer, pos,
+                       static_cast<uint8_t>(((cp >> 6) & 0x3f) | 0x80));
+        appendUtf8Byte(buffer, pos,
+                       static_cast<uint8_t>((cp & 0x3f) | 0x80));
+    }
+    else {
+        if ((pos + 3) >= bufferSize) {
+            return false;
+        }
+        appendUtf8Byte(buffer, pos,
+                       static_cast<uint8_t>((cp >> 18) | 0xf0));
+        appendUtf8Byte(buffer, pos,
+                       static_cast<uint8_t>(((cp >> 12) & 0x3f) | 0x80));
+        appendUtf8Byte(buffer, pos,
+                       static_cast<uint8_t>(((cp >> 6) & 0x3f) | 0x80));
+        appendUtf8Byte(buffer, pos,
+                       static_cast<uint8_t>((cp & 0x3f) | 0x80));
+    }
+
+    return true;
+}
+
+inline size_t
+utf8RequiredBytes(uint32_t cp)
+{
+    size_t result(1);
+
+    if (cp >= 0x80) {
+        if (cp < 0x800) {
+            result = 2;
+        }
+        else if (cp < 0x10000) {
+            result = 3;
+        }
+        else {
+            result = 4;
+        }
+    }
+
+    return result;
+}
+
+std::string
+expectJsonString(ML::Parse_Context & context, bool acceptUTF8)
+{
+    skipJsonWhitespace(context);
+    context.expect_literal('"');
+
+    char internalBuffer[4096];
+
+    char * buffer = internalBuffer;
+    size_t bufferSize = 4096;
+    size_t pos = 0;
+
+    // Try multiple times to make it fit
+    while (!context.match_literal('"')) {
+        unsigned char c = *context++;
+        int reqBytes = 1;
+        bool unicode(false);
+        if (c == '\\') {
+            c = *context++;
+            switch (c) {
+            case 't': c = '\t';  break;
+            case 'n': c = '\n';  break;
+            case 'r': c = '\r';  break;
+            case 'f': c = '\f';  break;
+            case 'b': c = '\b';  break;
+            case '/': c = '/';   break;
+            case '\\':c = '\\';  break;
+            case '"': c = '"';   break;
+            case 'u': {
+                c = context.expect_hex4();
+                reqBytes = utf8RequiredBytes(c);
+                unicode = true;
+                break;
+            }
+            default:
+                context.exception("invalid escaped char");
+            }
+        }
+        if (!acceptUTF8 && c >= 127) {
+            context.exception("invalid JSON ASCII string character");
+        }
+        while ((pos + reqBytes) >= bufferSize) {
+            size_t newBufferSize = bufferSize * 8;
+            char * newBuffer = new char[newBufferSize];
+            std::copy(buffer, buffer + bufferSize, newBuffer);
+            if (buffer != internalBuffer)
+                delete[] buffer;
+            buffer = newBuffer;
+            bufferSize = newBufferSize;
+        }
+        if (unicode) {
+            ExcAssert(appendUtf8(buffer, pos, bufferSize, c));
+        }
+        else {
+            /* Input characters that are > 127 are copied verbatim and assumed
+               to be utf-8. */
+            buffer[pos++] = c;
+        }
+    }
+    
+    string result(buffer, buffer + pos);
+    if (buffer != internalBuffer)
+        delete[] buffer;
+    
+    return result;
+}
+
+inline ssize_t
+expectJsonString(ML::Parse_Context & context,
+                 char * buffer, size_t maxLength,
+                 bool acceptUTF8)
+{
+    ML::skipJsonWhitespace(context);
+    context.expect_literal('"');
+
+    size_t bufferSize = maxLength - 1;
+    size_t pos = 0;
+
+    // Try multiple times to make it fit
+    while (!context.match_literal('"')) {
+        unsigned char c = *context++;
+        bool unicode(false);
+        if (c == '\\') {
+            c = *context++;
+            switch (c) {
+            case 't': c = '\t'; break;
+            case 'n': c = '\n'; break;
+            case 'r': c = '\r'; break;
+            case 'f': c = '\f'; break;
+            case 'b': c = '\b'; break;
+            case '/': c = '/'; break;
+            case '\\':c = '\\'; break;
+            case '"': c = '"'; break;
+            case 'u': {
+                c = context.expect_hex4();
+                unicode = true;
+                break;
+            }
+            default:
+                context.exception("invalid escaped char");
+            }
+        }
+        if (!acceptUTF8 && c >= 127) {
+            context.exception("invalid JSON ASCII string character");
+        }
+        if (unicode) {
+            if (!appendUtf8(buffer, pos, bufferSize, c)) {
+                return -1;
+            }
+        }
+        else {
+            /* Input characters that are > 127 are copied verbatim and assumed
+               to be utf-8. */
+            buffer[pos++] = c;
+        }
+    }
+
+    buffer[pos] = 0; // null terminator
+
+    return pos;
+}
 
 }
 
@@ -129,7 +326,7 @@ bool matchJsonString(Parse_Context & context, std::string & str)
 
     while (!context.match_literal('"')) {
         if (context.eof()) return false;
-        int c = *context++;
+        unsigned char c = *context++;
         //if (c < 0 || c >= 127)
         //    context.exception("invalid JSON string character");
         if (c != '\\') {
@@ -148,7 +345,7 @@ bool matchJsonString(Parse_Context & context, std::string & str)
         case '"': result.push_back('"');   break;
         case 'u': {
             int code = context.expect_hex4();
-            if (code<0 || code>255)
+            if (code <0 || code > 255)
             {
                 return false;
             }
@@ -165,6 +362,32 @@ bool matchJsonString(Parse_Context & context, std::string & str)
     return true;
 }
 
+std::string
+expectJsonStringAscii(Parse_Context & context)
+{
+    return expectJsonString(context, false);
+}
+
+ssize_t
+expectJsonStringAscii(Parse_Context & context,
+                      char * buf, size_t maxLength)
+{
+    return expectJsonString(context, buf, maxLength, false);
+}
+
+std::string
+expectJsonStringUTF8(Parse_Context & context)
+{
+    return expectJsonString(context, true);
+}
+
+ssize_t
+expectJsonStringUTF8(Parse_Context & context,
+                     char * buf, size_t maxLength)
+{
+    return expectJsonString(context, buf, maxLength, true);
+}
+
 std::string expectJsonStringAsciiPermissive(Parse_Context & context, char sub)
 {
     skipJsonWhitespace(context);
@@ -178,7 +401,7 @@ std::string expectJsonStringAsciiPermissive(Parse_Context & context, char sub)
 
     // Try multiple times to make it fit
     while (!context.match_literal('"')) {
-        int c = *context++;
+        unsigned char c = *context++;
         if (c == '\\') {
             c = *context++;
             switch (c) {
@@ -191,8 +414,7 @@ std::string expectJsonStringAsciiPermissive(Parse_Context & context, char sub)
             case '\\':c = '\\';  break;
             case '"': c = '"';   break;
             case 'u': {
-                int code = context.expect_hex4();
-                c = code;
+                c = context.expect_hex4();
                 break;
             }
             default:
@@ -213,121 +435,6 @@ std::string expectJsonStringAsciiPermissive(Parse_Context & context, char sub)
         buffer[pos++] = c;
     }
 
-    string result(buffer, buffer + pos);
-    if (buffer != internalBuffer)
-        delete[] buffer;
-    
-    return result;
-}
-
-ssize_t expectJsonStringAscii(Parse_Context & context, char * buffer, size_t maxLength)
-{
-    skipJsonWhitespace(context);
-    context.expect_literal('"');
-
-    size_t bufferSize = maxLength - 1;
-    size_t pos = 0;
-
-    // Try multiple times to make it fit
-    while (!context.match_literal('"')) {
-        int c = *context++;
-        if (c == '\\') {
-            c = *context++;
-            switch (c) {
-            case 't': c = '\t';  break;
-            case 'n': c = '\n';  break;
-            case 'r': c = '\r';  break;
-            case 'f': c = '\f';  break;
-            case 'b': c = '\b';  break;
-            case '/': c = '/';   break;
-            case '\\':c = '\\';  break;
-            case '"': c = '"';   break;
-            case 'u': {
-                int code = context.expect_hex4();
-                if (code<0 || code>255) {
-                    context.exception(format("non 8bit char %d", code));
-                }
-                c = code;
-                break;
-            }
-            default:
-                context.exception("invalid escaped char");
-            }
-        }
-        if (c < 0 || c >= 127)
-           context.exception("invalid JSON ASCII string character");
-        if (pos == bufferSize) {
-            return -1;
-        }
-        buffer[pos++] = c;
-    }
-
-    buffer[pos] = 0; // null terminator
-
-    return pos;
-}
-
-std::string expectJsonStringAscii(Parse_Context & context)
-{
-    skipJsonWhitespace(context);
-    context.expect_literal('"');
-
-    char internalBuffer[4096];
-
-    char * buffer = internalBuffer;
-    size_t bufferSize = 4096;
-    size_t pos = 0;
-
-    // Try multiple times to make it fit
-    while (!context.match_literal('"')) {
-
-#if 0 // attempt to do it a block at a time
-        char * bufferEnd = cbuffer + bufferSize;
-
-        int charsMatched
-            = context.match_text(buffer + pos, buffer + bufferSize,
-                                 "\"\\");
-        pos += charsMatched;
-#endif
-
-        int c = *context++;
-        if (c == '\\') {
-            c = *context++;
-            switch (c) {
-            case 't': c = '\t';  break;
-            case 'n': c = '\n';  break;
-            case 'r': c = '\r';  break;
-            case 'f': c = '\f';  break;
-            case 'b': c = '\b';  break;
-            case '/': c = '/';   break;
-            case '\\':c = '\\';  break;
-            case '"': c = '"';   break;
-            case 'u': {
-                int code = context.expect_hex4();
-                if (code<0 || code>255) {
-                    context.exception(format("non 8bit char %d", code));
-                }
-                c = code;
-                break;
-            }
-            default:
-                context.exception("invalid escaped char");
-            }
-        }
-        if (c < 0 || c >= 127)
-           context.exception("invalid JSON ASCII string character");
-        if (pos == bufferSize) {
-            size_t newBufferSize = bufferSize * 8;
-            char * newBuffer = new char[newBufferSize];
-            std::copy(buffer, buffer + bufferSize, newBuffer);
-            if (buffer != internalBuffer)
-                delete[] buffer;
-            buffer = newBuffer;
-            bufferSize = newBufferSize;
-        }
-        buffer[pos++] = c;
-    }
-    
     string result(buffer, buffer + pos);
     if (buffer != internalBuffer)
         delete[] buffer;

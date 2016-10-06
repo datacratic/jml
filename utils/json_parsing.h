@@ -7,16 +7,18 @@
    Functionality to ease parsing of JSON from within a parse_function.
 */
 
-#ifndef __jml__utils__json_parsing_h__
-#define __jml__utils__json_parsing_h__
+#pragma once
 
 #include <string>
 #include <functional>
 #include "parse_context.h"
-#include <boost/lexical_cast.hpp>
 
 
 namespace ML {
+
+/* Forward declaration */
+struct Parse_Context;
+
 
 /*****************************************************************************/
 /* JSON UTILITIES                                                            */
@@ -37,12 +39,28 @@ std::string expectJsonStringAscii(Parse_Context & context);
  * If it doesn't fit, then return zero.
  */
 ssize_t expectJsonStringAscii(Parse_Context & context, char * buf,
-                             size_t maxLength);
+                              size_t maxLength);
 
 /*
  * if non-ascii characters are found we replace them by an ascii character that is supplied
  */
 std::string expectJsonStringAsciiPermissive(Parse_Context & context, char c);
+
+/*
+ * Decode JSON Unicode strings using utf-8 encoding. The input supports both
+ * characters encoded in the form and plain utf-8 characters.
+ */
+std::string expectJsonStringUTF8(Parse_Context & context);
+ssize_t expectJsonStringUTF8(Parse_Context & context,
+                             char * buf, size_t maxLength);
+
+/*
+ * If non-ascii characters are found an exception is thrown.
+ * Output goes into the given buffer, of the given maximum length.
+ * If it doesn't fit, then return zero.
+ */
+ssize_t expectJsonStringAscii(Parse_Context & context, char * buf,
+                             size_t maxLength);
 
 bool matchJsonString(Parse_Context & context, std::string & str);
 
@@ -198,7 +216,4 @@ expectJsonAscii(Parse_Context & context)
 #endif
 
 } // namespace ML
-
-
-#endif /* __jml__utils__json_parsing_h__ */
 

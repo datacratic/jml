@@ -8,13 +8,16 @@
 #define BOOST_TEST_MAIN
 #define BOOST_TEST_DYN_LINK
 
+#include <string>
 #include "jml/utils/json_parsing.h"
 #include "jml/utils/info.h"
+#include "jml/utils/string_functions.h"
 
 #include <boost/test/unit_test.hpp>
 #include <boost/test/auto_unit_test.hpp>
 #include <math.h>
 
+using namespace std;
 using namespace ML;
 
 using boost::unit_test::test_suite;
@@ -85,4 +88,38 @@ BOOST_AUTO_TEST_CASE( test1 )
     BOOST_CHECK_THROW(testHex4("002", 2), std::exception);
     BOOST_CHECK_THROW(testHex4("002G", 2), std::exception);
     BOOST_CHECK_THROW(testHex4("002.", 2), std::exception);
+}
+
+BOOST_AUTO_TEST_CASE( test_expectJsonStringAscii )
+{
+    vector<pair<string, string> > fixtures{
+        {"\"abcdef\"", "abcdef"},
+        {"\"a\\t\\n\\r\\f\\b\\/\\\\\\\"\\u0041\"", "a\t\n\r\f\b/\\\"A"}
+    };
+
+    auto testString = [&] (const string & str) {
+        ML::Parse_Context context(str, str.c_str(), str.c_str() + str.size());
+        return ML::expectJsonStringAscii(context);
+    };
+
+    for (const auto & fixture: fixtures) {
+        string result = testString(fixture.first);
+        BOOST_CHECK_EQUAL(result, fixture.second);
+    }
+
+    /* "Invalid JSON ASCII string character" */
+    BOOST_CHECK_THROW(testString("\"é\""), ML::Exception);
+}
+
+BOOST_AUTO_TEST_CASE( test_expectJsonStringUTF8 )
+{
+    pair<string, string> fixture{"\"\\u01e0Ǡ\"", "àǠ"};
+
+    auto testString = [&] (const string & str) {
+        ML::Parse_Context context(str, str.c_str(), str.c_str() + str.size());
+        return ML::expectJsonStringUTF8(context);
+    };
+
+    string result = testString(fixture.first);
+    BOOST_CHECK_EQUAL(result, fixture.second);
 }
