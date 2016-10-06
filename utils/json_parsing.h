@@ -11,7 +11,6 @@
 
 #include <string>
 #include <functional>
-#include "parse_context.h"
 
 
 namespace ML {
@@ -88,14 +87,7 @@ matchJsonObject(Parse_Context & context,
 
 void skipJsonWhitespace(Parse_Context & context);
 
-inline bool expectJsonBool(Parse_Context & context)
-{
-    if (context.match_literal("true"))
-        return true;
-    else if (context.match_literal("false"))
-        return false;
-    context.exception("expected bool (true or false)");
-}
+bool expectJsonBool(Parse_Context & context);
 
 /** Representation of a numeric value in JSON.  It's designed to allow
     it to be stored the same way it was written (as an integer versus
@@ -127,91 +119,8 @@ bool matchJsonNumber(Parse_Context & context, JsonNumber & num);
 
 #ifdef CPPTL_JSON_H_INCLUDED
 
-inline Json::Value
-expectJson(Parse_Context & context)
-{
-    context.skip_whitespace();
-    if (*context == '"')
-        return expectJsonStringUTF8(context);
-    else if (context.match_literal("null"))
-        return Json::Value();
-    else if (context.match_literal("true"))
-        return Json::Value(true);
-    else if (context.match_literal("false"))
-        return Json::Value(false);
-    else if (*context == '[') {
-        Json::Value result(Json::arrayValue);
-        expectJsonArray(context,
-                        [&] (int i, Parse_Context & context)
-                        {
-                            result[i] = expectJson(context);
-                        });
-        return result;
-    } else if (*context == '{') {
-        Json::Value result(Json::objectValue);
-        expectJsonObject(context,
-                         [&] (const std::string & key, Parse_Context & context)
-                         {
-                             result[key] = expectJson(context);
-                         });
-        return result;
-    } else {
-        JsonNumber number = expectJsonNumber(context);
-        switch (number.type) {
-        case JsonNumber::UNSIGNED_INT:
-            return number.uns;
-        case JsonNumber::SIGNED_INT:
-            return number.sgn;
-        case JsonNumber::FLOATING_POINT:
-            return number.fp;
-        default:
-            throw ML::Exception("logic error in expectJson");
-        }
-    }
-}
-
-inline Json::Value
-expectJsonAscii(Parse_Context & context)
-{
-    context.skip_whitespace();
-    if (*context == '"')
-        return expectJsonStringAscii(context);
-    else if (context.match_literal("null"))
-        return Json::Value();
-    else if (context.match_literal("true"))
-        return Json::Value(true);
-    else if (context.match_literal("false"))
-        return Json::Value(false);
-    else if (*context == '[') {
-        Json::Value result(Json::arrayValue);
-        expectJsonArray(context,
-                        [&] (int i, Parse_Context & context)
-                        {
-                            result[i] = expectJsonAscii(context);
-                        });
-        return result;
-    } else if (*context == '{') {
-        Json::Value result(Json::objectValue);
-        expectJsonObjectAscii(context,
-                         [&] (const char * key, Parse_Context & context)
-                         {
-                             result[key] = expectJsonAscii(context);
-                         });
-        return result;
-    } else {
-        JsonNumber number = expectJsonNumber(context);
-        switch (number.type) {
-        case JsonNumber::UNSIGNED_INT:
-            return number.uns;
-        case JsonNumber::SIGNED_INT:
-            return number.sgn;
-        case JsonNumber::FLOATING_POINT:
-            return number.fp;
-        default:
-            throw ML::Exception("logic error in expectJson");
-        }
-    }
-}
+Json::Value expectJson(Parse_Context & context);
+Json::Value expectJsonAscii(Parse_Context & context);
 
 #endif
 

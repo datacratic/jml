@@ -12,6 +12,7 @@
 #include "jml/utils/json_parsing.h"
 #include "jml/utils/info.h"
 #include "jml/utils/string_functions.h"
+#include "jml/utils/parse_context.h"
 
 #include <boost/test/unit_test.hpp>
 #include <boost/test/auto_unit_test.hpp>
