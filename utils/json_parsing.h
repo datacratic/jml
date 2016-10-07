@@ -117,12 +117,5 @@ JsonNumber expectJsonNumber(Parse_Context & context);
 /** Match a JSON number. */
 bool matchJsonNumber(Parse_Context & context, JsonNumber & num);
 
-#ifdef CPPTL_JSON_H_INCLUDED
-
-Json::Value expectJson(Parse_Context & context);
-Json::Value expectJsonAscii(Parse_Context & context);
-
-#endif
-
 } // namespace ML
 
