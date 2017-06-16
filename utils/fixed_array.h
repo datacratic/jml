@@ -28,7 +28,6 @@
 #include <boost/multi_array.hpp>
 #include <boost/type_traits.hpp>
 #include "jml/utils/multi_array_utils.h"
-#include <boost/function.hpp>
 #include <numeric>
 
 

@@ -8,16 +8,18 @@
 
 #pragma once
 
-#include "jml/utils/guard.h"
-#include "jml/arch/format.h"
-#include "jml/arch/spinlock.h"
-#include "jml/arch/semaphore.h"
 #include <functional>
 #include <list>
 #include <map>
 #include <mutex>
 #include <set>
 #include <thread>
+#include <vector>
+
+#include "jml/utils/guard.h"
+#include "jml/arch/format.h"
+#include "jml/arch/spinlock.h"
+#include "jml/arch/semaphore.h"
 
 
 namespace ML {

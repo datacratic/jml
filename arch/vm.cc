@@ -5,6 +5,8 @@
    Virtual memory functions.
 */
 
+#include <string.h>
+
 #include "vm.h"
 #include "jml/arch/format.h"
 #include "jml/arch/exception.h"

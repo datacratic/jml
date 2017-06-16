@@ -10,7 +10,7 @@
 #ifndef __boosting__boosted_stumps_impl_h__
 #define __boosting__boosted_stumps_impl_h__
 
-
+#include <assert.h>
 #include "boosted_stumps.h"
 #include "jml/utils/sgi_algorithm.h"
 #include <iostream>

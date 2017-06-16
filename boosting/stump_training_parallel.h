@@ -83,7 +83,7 @@ struct Stump_Trainer_Parallel
         const Examples & examples;
         Results & results;
         const Stump_Trainer_Parallel & trainer;
-        boost::function<void ()> next;
+        std::function<void ()> next;
         W default_w;
         std::shared_ptr<std::vector<std::pair<int, float> > > feature_scores_ptr;
         int group;
@@ -108,7 +108,7 @@ struct Stump_Trainer_Parallel
                      const Examples & examples,
                      Results & results,
                      const Stump_Trainer_Parallel & trainer,
-                     boost::function<void ()> next,
+                     std::function<void ()> next,
                      int parent = -1)
             : features(features), data(data), predicted(predicted),
               weights(weights), examples(examples), results(results),

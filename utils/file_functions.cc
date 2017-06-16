@@ -365,14 +365,14 @@ public:
 class File_Read_Buffer::Mem_Region : public File_Read_Buffer::Region {
 public:
     Mem_Region(const char * start, size_t size,
-               boost::function<void ()> onDone)
+               std::function<void ()> onDone)
     {
         this->start = start;
         this->size = size;
         this->onDone = onDone;
     }
 
-    boost::function<void ()> onDone;
+    std::function<void ()> onDone;
 
     virtual ~Mem_Region()
     {
@@ -406,7 +406,7 @@ File_Read_Buffer::File_Read_Buffer(int fd)
 
 File_Read_Buffer::File_Read_Buffer(const char * start, size_t length,
                                    const std::string & filename,
-                                   boost::function<void ()> onDone)
+                                   std::function<void ()> onDone)
 {
     open(start, length, filename, onDone);
 }
@@ -442,7 +442,7 @@ void File_Read_Buffer::open(int fd)
 
 void File_Read_Buffer::open(const char * start, size_t length,
                             const std::string & filename,
-                            boost::function<void ()> onDone)
+                            std::function<void ()> onDone)
 {
     region.reset(new Mem_Region(start, length, onDone));
     filename_ = filename;

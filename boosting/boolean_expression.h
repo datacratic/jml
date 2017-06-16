@@ -87,8 +87,8 @@ struct Disjunction {
         as we go. */
     template<typename NewOutcome>
     Disjunction<NewOutcome>
-    transform(const boost::function<bool (Outcome outcome,
-                                          NewOutcome & noutcome)> & fn)
+    transform(const std::function<bool (Outcome outcome,
+                                        NewOutcome & noutcome)> & fn)
         const
     {
         Disjunction<NewOutcome> result;

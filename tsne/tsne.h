@@ -17,7 +17,6 @@
 
 #include "jml/stats/distribution.h"
 #include <boost/multi_array.hpp>
-#include <boost/function.hpp>
 
 namespace ML {
 
@@ -120,7 +119,7 @@ struct TSNE_Params {
 // - TSNE_Params &: parameters (may be modified)
 // The return should be true to keep going, or false to stop (the most recent
 // Y will then be returned).
-typedef boost::function<bool (int, float, const char *)>
+typedef std::function<bool (int, float, const char *)>
 TSNE_Callback;
 
 boost::multi_array<float, 2>

@@ -24,7 +24,6 @@
 #define __utils__file_functions_h__
 
 #include <boost/shared_ptr.hpp>
-#include <boost/function.hpp>
 #include <string>
 #include <stdint.h>
 #include <ftw.h>
@@ -81,7 +80,7 @@ std::string print(FileType type);
 
 std::ostream & operator << (std::ostream & stream, const FileType & type);
 
-typedef boost::function<FileAction (std::string dir,
+typedef std::function<FileAction (std::string dir,
                                     std::string basename,
                                     const struct stat & stats,
                                     FileType type,
@@ -110,14 +109,14 @@ public:
     File_Read_Buffer(const File_Read_Buffer & other);
     File_Read_Buffer(const char * start, size_t length,
                      const std::string & fileName = "anonymous memory",
-                     boost::function<void ()> onDone = boost::function<void ()>());
+                     std::function<void ()> onDone = std::function<void ()>());
 
     void open(const std::string & filename);
     void open(int fd);
 
     void open(const char * start, size_t length,
               const std::string & filename = "anonymous memory",
-              boost::function<void ()> onDone = boost::function<void ()>());
+              std::function<void ()> onDone = std::function<void ()>());
     
     void close();
 

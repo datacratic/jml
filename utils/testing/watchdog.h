@@ -10,7 +10,6 @@
 
 #include <boost/thread/thread.hpp>
 #include <boost/bind.hpp>
-#include <boost/function.hpp>
 #include <iostream>
 #include <signal.h>
 
@@ -20,7 +19,7 @@ struct Watchdog {
     bool finished;
     double seconds;
     boost::thread_group tg;
-    boost::function<void ()> timeoutFunction;
+    std::function<void ()> timeoutFunction;
     
     static void abortProcess()
     {
@@ -49,7 +48,7 @@ struct Watchdog {
         of seconds.
     */
     Watchdog(double seconds = 2.0,
-             boost::function<void ()> timeoutFunction = abortProcess)
+             std::function<void ()> timeoutFunction = abortProcess)
         : finished(false), seconds(seconds), timeoutFunction(timeoutFunction)
     {
         //return;

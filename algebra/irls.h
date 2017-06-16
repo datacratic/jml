@@ -15,7 +15,6 @@
 #include "jml/stats/distribution.h"
 #include "jml/db/persistent.h"
 #include "jml/utils/enum_info.h"
-#include <boost/function.hpp>
 
 namespace ML {
 

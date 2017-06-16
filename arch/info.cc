@@ -1,29 +1,34 @@
 /* info.cc
+
    Jeremy Barnes, 21 February 2007
    Copyright (c) 2007 Jeremy Barnes.  All rights reserved.
 
 */
 
-#include "info.h"
 #include <unistd.h>
 #include <stdio.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <netdb.h>
 #include <pwd.h>
 #include <errno.h>
-#include "jml/arch/exception.h"
-#include "jml/arch/cpuid.h"
-#include <fstream>
-#include <iostream>
+#include <string.h>
 #include <sys/time.h>
 #include <time.h>
-#include "jml/arch/cpu_info.h"
-#include "jml/utils/guard.h"
-#include <boost/bind.hpp>
 #include <dirent.h>
-#include "jml/arch/format.h"
+#include <sys/types.h>
+#include <sys/socket.h>
 
+#include <fstream>
+#include <iostream>
+
+#include "jml/arch/exception.h"
+#include "jml/arch/cpuid.h"
+#include "jml/arch/cpu_info.h"
+#include "jml/arch/format.h"
+#include "jml/utils/guard.h"
+
+#include <boost/bind.hpp>
+
+#include "info.h"
 
 using namespace std;
 
