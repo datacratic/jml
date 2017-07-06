@@ -9,13 +9,12 @@
 #define BOOST_TEST_DYN_LINK
 
 #include <boost/test/unit_test.hpp>
-#include <boost/thread.hpp>
-#include <boost/thread/barrier.hpp>
 #include <boost/bind.hpp>
 #include <vector>
 #include <stdint.h>
 #include <iostream>
 
+#include <boost/thread/barrier.hpp>
 #include "jml/utils/worker_task.h"
 #include "jml/boosting/training_data.h"
 #include "jml/boosting/dense_features.h"
@@ -63,15 +62,15 @@ void test_semaphore(int nthreads, int niter)
     int errors = 0;
     Semaphore sem(nthreads);
 
-    boost::thread_group tg;
+    vector<thread> tg;
     for (unsigned i = 0;  i < nthreads;  ++i)
-        tg.create_thread(boost::bind(test_semaphore_thread<Semaphore>,
-                                     boost::ref(sem),
-                                     boost::ref(barrier),
-                                     boost::ref(errors),
-                                     niter));
-    
-    tg.join_all();
+        tg.emplace_back(std::bind(test_semaphore_thread<Semaphore>,
+                                  std::ref(sem),
+                                  std::ref(barrier),
+                                  std::ref(errors),
+                                  niter));
+
+    for (auto & th: tg) { th.join(); }
 
     BOOST_CHECK_EQUAL(errors, 0);
 }
@@ -94,8 +93,8 @@ void test_overhead_job(int nthreads, int ntasks, bool verbose = true,
     {
         int parent = -1;  // no parent group
         group = worker.get_group(NO_JOB, "", parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
+        Call_Guard guard(std::bind(&Worker_Task::unlock_group,
+                                     std::ref(worker),
                                      group));
         
         for (unsigned i = 0;  i < ntasks;  ++i)

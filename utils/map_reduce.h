@@ -12,7 +12,6 @@
 #include <utility>
 #include <mutex>
 #include "worker_task.h"
-#include <boost/thread/mutex.hpp>
 
 namespace ML {
 

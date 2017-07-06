@@ -14,14 +14,15 @@
 #include "jml/arch/tick_counter.h"
 
 #include <boost/test/unit_test.hpp>
-#include <boost/thread.hpp>
-#include <boost/thread/barrier.hpp>
 #include <boost/bind.hpp>
+#include <boost/thread.hpp>
 #include <vector>
 #include <stdint.h>
 #include <iostream>
 #include <stdarg.h>
 #include <errno.h>
+#include <thread>
+
 
 using namespace ML;
 using namespace std;
@@ -89,12 +90,12 @@ void test_atomic_add2_type()
     int nthreads = 8, iter = 1000000;
     boost::barrier barrier(nthreads);
     X val = 0;
-    boost::thread_group tg;
+    vector<thread> tg;
 
     for (unsigned i = 0;  i < nthreads;  ++i)
-        tg.create_thread(test_atomic_add2_thread<X>(barrier, val, iter, i));
+        tg.emplace_back(test_atomic_add2_thread<X>(barrier, val, iter, i));
 
-    tg.join_all();
+    for (auto & th: tg) { th.join(); }
 
     BOOST_CHECK_EQUAL(val, (iter * nthreads) & (X)-1);
 }
@@ -142,13 +143,13 @@ void test_atomic_max_type()
     if (iter2 < iter) iter = iter2;
     boost::barrier barrier(nthreads);
     X val = 0;
-    boost::thread_group tg;
+    vector<thread> tg;
     size_t num_errors = 0;
     for (unsigned i = 0;  i < nthreads;  ++i)
-        tg.create_thread(test_atomic_max_thread<X>(barrier, val, iter, i,
+        tg.emplace_back(test_atomic_max_thread<X>(barrier, val, iter, i,
                                                    num_errors));
 
-    tg.join_all();
+    for (auto & th: tg) { th.join(); }
 
     BOOST_CHECK_EQUAL(num_errors, 0);
 }

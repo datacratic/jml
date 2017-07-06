@@ -18,8 +18,6 @@
 #include <boost/filesystem.hpp>
 #include <boost/iostreams/stream_buffer.hpp>
 #include <boost/test/unit_test.hpp>
-#include <boost/thread.hpp>
-#include <boost/thread/barrier.hpp>
 #include <boost/bind.hpp>
 #include <vector>
 #include <stdint.h>

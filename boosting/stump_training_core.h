@@ -22,7 +22,6 @@
 #include "stump_training.h"
 #include "training_index.h"
 #include "jml/utils/guard.h"
-#include <boost/bind.hpp>
 #include "thread_context.h"
 
 namespace ML {
@@ -341,9 +340,9 @@ struct Stump_Trainer {
                                      "test all group",
                                      context.group());
         {
-            Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                         boost::ref(worker),
-                                         group));
+            Call_Guard guard(std::bind(&Worker_Task::unlock_group,
+                                       std::ref(worker),
+                                       group));
             
             for (unsigned i = 0;  i < features.size();  ++i)
                 worker.add(Test_Feature_Job<Results, Weights>

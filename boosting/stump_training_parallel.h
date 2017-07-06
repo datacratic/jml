@@ -12,7 +12,6 @@
 
 #include "jml/utils/worker_task.h"
 #include "jml/utils/guard.h"
-#include <boost/bind.hpp>
 
 namespace ML {
 
@@ -138,9 +137,9 @@ struct Stump_Trainer_Parallel
             /* Get our task group. */
             group = trainer.worker.get_group
                 (*this, format("Stump Test_All_Job under %d", parent), parent);
-            Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                         boost::ref(trainer.worker),
-                                         group));
+            Call_Guard guard(std::bind(&Worker_Task::unlock_group,
+                                       std::ref(trainer.worker),
+                                       group));
             
             for (unsigned i = 0;  i < features.size();  ++i) {
                 //cerr << "adding feature " << i << std::endl;

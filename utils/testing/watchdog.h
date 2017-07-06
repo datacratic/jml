@@ -8,18 +8,18 @@
 #ifndef __jml_testing__watchdog_h__
 #define __jml_testing__watchdog_h__
 
-#include <boost/thread/thread.hpp>
-#include <boost/bind.hpp>
-#include <iostream>
 #include <signal.h>
+#include <functional>
+#include <thread>
+#include <iostream>
 
 namespace ML {
 
 struct Watchdog {
     bool finished;
     double seconds;
-    boost::thread_group tg;
     std::function<void ()> timeoutFunction;
+    std::thread wdThread;
     
     static void abortProcess()
     {
@@ -49,17 +49,15 @@ struct Watchdog {
     */
     Watchdog(double seconds = 2.0,
              std::function<void ()> timeoutFunction = abortProcess)
-        : finished(false), seconds(seconds), timeoutFunction(timeoutFunction)
+        : finished(false), seconds(seconds), timeoutFunction(timeoutFunction),
+          wdThread(std::bind(&Watchdog::runThread, this))
     {
-        //return;
-        tg.create_thread(boost::bind(&Watchdog::runThread,
-                                     this));
     }
 
     ~Watchdog()
     {
         finished = true;
-        tg.join_all();
+        wdThread.join();
     }
 };
 

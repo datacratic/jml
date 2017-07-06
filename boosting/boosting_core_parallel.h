@@ -11,7 +11,6 @@
 
 #include "jml/utils/worker_task.h"
 #include "jml/utils/guard.h"
-#include <boost/bind.hpp>
 #include "jml/utils/smart_ptr_utils.h"
 
 
@@ -117,9 +116,9 @@ struct Update_Weights_Parallel : public Update_Weights<Updater> {
         /* Get our task group for the update. */
         group = worker.get_group(next, format("stump update group under %d", parent),
                                  parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(std::bind(&Worker_Task::unlock_group,
+                                   std::ref(worker),
+                                   group));
 
         /* First we split up the weights matrix into enough bands that we get a
            decent amount of work on each example.
@@ -224,9 +223,9 @@ struct Update_Weights_Parallel : public Update_Weights<Updater> {
         /* Get our task group for the update. */
         group = worker.get_group
             (next, format("classifier update group under %d", parent), parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(std::bind(&Worker_Task::unlock_group,
+                                   std::ref(worker),
+                                   group));
 
         /* First we split up the weights matrix into enough bands that we get a
            decent amount of work on each example.
@@ -366,9 +365,9 @@ struct Update_Scores_Parallel
            the accuracy go to the end. */
         group = worker.get_group
             (next, format("Update_Scores job under %d", parent), parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(std::bind(&Worker_Task::unlock_group,
+                                   std::ref(worker),
+                                   group));
         
         /* First we split up the output matrix into enough bands that we get a
            decent amount of work on each example.
@@ -475,9 +474,9 @@ struct Update_Scores_Parallel
            the accuracy go to the end. */
         group = worker.get_group
             (next, format("Update_Scores job under %d", parent), parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(std::bind(&Worker_Task::unlock_group,
+                                   std::ref(worker),
+                                   group));
         
         /* First we split up the output matrix into enough bands that we get a
            decent amount of work on each example.
@@ -644,9 +643,9 @@ struct Update_Weights_And_Scores_Parallel
            the accuracy go to the end. */
         group = worker.get_group
             (next, format("Update_Weights_And_Scores job under %d", parent), parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(std::bind(&Worker_Task::unlock_group,
+                                   std::ref(worker),
+                                   group));
         
         /* First we split up the output matrix into enough bands that we get a
            decent amount of work on each example.
@@ -758,9 +757,9 @@ struct Update_Weights_And_Scores_Parallel
            the accuracy go to the end. */
         group = worker.get_group
             (next, format("Update_Weights_And_Scores job under %d", parent), parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(std::bind(&Worker_Task::unlock_group,
+                                   std::ref(worker),
+                                   group));
         
         /* First we split up the output matrix into enough bands that we get a
            decent amount of work on each example.

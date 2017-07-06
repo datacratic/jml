@@ -9,8 +9,6 @@
 #define BOOST_TEST_DYN_LINK
 
 #include <boost/test/unit_test.hpp>
-#include <boost/thread.hpp>
-#include <boost/thread/barrier.hpp>
 #include <boost/bind.hpp>
 #include <boost/shared_array.hpp>
 #include <boost/scoped_array.hpp>

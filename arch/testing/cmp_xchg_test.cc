@@ -8,15 +8,15 @@
 #define BOOST_TEST_MAIN
 #define BOOST_TEST_DYN_LINK
 
+#include <thread>
+
 #include "jml/arch/cmp_xchg.h"
 #include "jml/arch/demangle.h"
 #include "jml/arch/cpuid.h"
 #include "jml/arch/format.h"
 
 #include <boost/test/unit_test.hpp>
-#include <boost/thread.hpp>
 #include <boost/thread/barrier.hpp>
-#include <boost/bind.hpp>
 #include <vector>
 #include <stdint.h>
 #include <iostream>
@@ -165,11 +165,13 @@ void test2_type()
     int nthreads = 2, iter = 1000000;
     boost::barrier barrier(nthreads);
     X val = 0;
-    boost::thread_group tg;
+    vector<thread> tg;
     for (unsigned i = 0;  i < nthreads;  ++i)
-        tg.create_thread(test2_thread<X>(barrier, val, iter));
+        tg.emplace_back(test2_thread<X>(barrier, val, iter));
 
-    tg.join_all();
+    for (auto & th: tg) {
+        th.join();
+    }
 
     //cerr << "val = " << (uint64_t)val << endl;
     //cerr << "leftover = " << ((iter * nthreads) & (X)-1) << endl;
