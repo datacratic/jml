@@ -8,13 +8,14 @@
 #define BOOST_TEST_MAIN
 #define BOOST_TEST_DYN_LINK
 
+#include <functional>
+
 #include "jml/arch/vm.h"
 #include "jml/arch/exception.h"
 #include "jml/utils/vector_utils.h"
 #include "jml/arch/exception_handler.h"
 
 #include <boost/test/unit_test.hpp>
-#include <boost/bind.hpp>
 #include <iostream>
 #include <dirent.h>
 #include "jml/utils/guard.h"
@@ -36,7 +37,7 @@ size_t num_open_files()
         throw Exception("num_open_files(): opendir(): "
                         + string(strerror(errno)));
 
-    Call_Guard closedir_dfd(boost::bind(closedir, dfd));
+    Call_Guard closedir_dfd(bind(closedir, dfd));
 
     size_t result = 0;
     

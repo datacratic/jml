@@ -5,6 +5,8 @@
    Implementation of basic classifier methods.
 */
 
+#include <functional>
+
 #include "classifier.h"
 #include "classifier_persist_impl.h"
 #include "jml/arch/threads.h"
@@ -16,7 +18,6 @@
 #include "dense_features.h"
 #include "jml/utils/smart_ptr_utils.h"
 #include "jml/utils/vector_utils.h"
-#include <boost/bind.hpp>
 #include <boost/thread/tss.hpp>
 #include "jml/utils/exc_assert.h"
 #include "jml/math/xdiv.h"
@@ -708,9 +709,9 @@ accuracy(const Training_Data & data,
         group = worker.get_group(NO_JOB,
                                  format("accuracy group under %d", parent),
                                  parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(bind(&Worker_Task::unlock_group,
+                              std::ref(worker),
+                              group));
         
         /* Do 1024 examples per job. */
         for (unsigned x = 0;  x < data.example_count();  x += 1024)
@@ -789,17 +790,17 @@ predict(const Training_Data & data,
         group = worker.get_group(NO_JOB,
                                  format("predict group under %d", parent),
                                  parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(bind(&Worker_Task::unlock_group,
+                              std::ref(worker),
+                              group));
         
         /* Do 1024 examples per job. */
         for (unsigned x = 0;  x < data.example_count();  x += 1024)
-            worker.add(boost::bind(Predict_Job(x,
-                                               std::min(x + 1024, nx),
-                                               *this,
-                                               opt_info,
-                                               data),
+            worker.add(bind(Predict_Job(x,
+                                        std::min(x + 1024, nx),
+                                        *this,
+                                        opt_info,
+                                        data),
                                    output),
                        "predict job",
                        group);
@@ -825,17 +826,17 @@ predict(const Training_Data & data,
         group = worker.get_group(NO_JOB,
                                  format("predict group under %d", parent),
                                  parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(bind(&Worker_Task::unlock_group,
+                              std::ref(worker),
+                              group));
         
         /* Do 1024 examples per job. */
         for (unsigned x = 0;  x < data.example_count();  x += 1024)
-            worker.add(boost::bind(Predict_Job(x,
-                                               std::min(x + 1024, nx),
-                                               *this,
-                                               opt_info,
-                                               data),
+            worker.add(bind(Predict_Job(x,
+                                        std::min(x + 1024, nx),
+                                        *this,
+                                        opt_info,
+                                        data),
                                    label,
                                    output),
                        "predict job",

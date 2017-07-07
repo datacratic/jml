@@ -10,7 +10,6 @@
 #define JML_TESTING_PERCEPTRON
 
 #include <boost/test/unit_test.hpp>
-#include <boost/bind.hpp>
 #include <vector>
 #include <stdint.h>
 #include <iostream>

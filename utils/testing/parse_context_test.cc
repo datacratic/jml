@@ -8,6 +8,7 @@
 #define BOOST_TEST_MAIN
 #define BOOST_TEST_DYN_LINK
 
+#include <functional>
 #include "jml/utils/parse_context.h"
 #include "jml/utils/file_functions.h"
 #include "jml/utils/guard.h"
@@ -18,7 +19,6 @@
 #include "jml/utils/csv.h"
 #include "jml/arch/format.h"
 #include <boost/test/unit_test.hpp>
-#include <boost/bind.hpp>
 #include <sstream>
 #include <fstream>
 
@@ -265,7 +265,7 @@ BOOST_AUTO_TEST_CASE( test2 )
     Call_Guard guard;
     {
         ofstream stream(tmp_filename.c_str());
-        guard.set(boost::bind(&delete_file, tmp_filename));
+        guard.set(bind(&delete_file, tmp_filename));
         stream << test1_str;
     }
 

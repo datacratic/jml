@@ -23,7 +23,6 @@
 #include "jml/utils/guard.h"
 #include "jml/boosting/evaluation.h"
 #include <boost/scoped_ptr.hpp>
-#include <boost/bind.hpp>
 #include "jml/utils/smart_ptr_utils.h"
 #include "jml/utils/vector_utils.h"
 #include "jml/utils/pair_utils.h"

@@ -10,7 +10,6 @@
 
 #include <boost/test/unit_test.hpp>
 #include <boost/test/floating_point_comparison.hpp>
-#include <boost/bind.hpp>
 #include <vector>
 #include <stdint.h>
 #include <iostream>

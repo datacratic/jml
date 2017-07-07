@@ -14,7 +14,6 @@
 #include "jml/arch/tick_counter.h"
 
 #include <boost/test/unit_test.hpp>
-#include <boost/bind.hpp>
 #include <boost/thread.hpp>
 #include <vector>
 #include <stdint.h>

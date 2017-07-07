@@ -6,6 +6,8 @@
    Task to perform work.
 */
 
+#include <functional>
+
 #include "jml/utils/worker_task.h"
 #include "jml/arch/exception.h"
 #include "jml/arch/timers.h"
@@ -14,7 +16,6 @@
 #include <boost/utility.hpp>
 #include "jml/utils/environment.h"
 #include "jml/utils/guard.h"
-#include <boost/bind.hpp>
 #include "jml/arch/cpu_info.h"
 
 
@@ -317,8 +318,8 @@ void Worker_Task::run_until_released(Semaphore & sem, int group)
     add_state_semaphore(state_semaphore);
 
     /* Make sure we remove this semaphore at the end. */
-    Call_Guard guard(boost::bind(&Worker_Task::remove_state_semaphore,
-                                 this, boost::ref(state_semaphore)));
+    Call_Guard guard(bind(&Worker_Task::remove_state_semaphore,
+                          this, std::ref(state_semaphore)));
     
     while (sem.tryacquire() == -1) {
 
@@ -433,8 +434,8 @@ wait_group_finished(Group_Info & group_info, int group)
     add_state_semaphore(state_semaphore);
 
     /* Make sure we remove this semaphore at the end. */
-    Call_Guard guard(boost::bind(&Worker_Task::remove_state_semaphore,
-                                 this, boost::ref(state_semaphore)));
+    Call_Guard guard(bind(&Worker_Task::remove_state_semaphore,
+                          this, std::ref(state_semaphore)));
     
     while (group_info.jobs_running > 0)
         state_semaphore.acquire();
@@ -470,8 +471,8 @@ run_until_finished(int group, bool unlock)
 
     /* The group is locked for now; make sure it will be unlocked at the
        end. */
-    Call_Guard unlock_guard(boost::bind(&Worker_Task::unlock_group,
-                                        this, group));
+    Call_Guard unlock_guard(bind(&Worker_Task::unlock_group,
+                                 this, group));
     
     /* Since the group is locked, this object must remain in memory here
        and so we don't need to lock to access it.  (A map's iterators
@@ -484,8 +485,8 @@ run_until_finished(int group, bool unlock)
     add_state_semaphore(state_semaphore);
     
     /* Make sure we remove this semaphore at the end. */
-    Call_Guard state_guard(boost::bind(&Worker_Task::remove_state_semaphore,
-                                       this, boost::ref(state_semaphore)));
+    Call_Guard state_guard(bind(&Worker_Task::remove_state_semaphore,
+                                this, std::ref(state_semaphore)));
     
     for (;;) {
         //cerr << "thread " << ACE_OS::thr_self() << " is waiting for group "

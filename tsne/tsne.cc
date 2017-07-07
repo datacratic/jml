@@ -5,6 +5,7 @@
    Implementation of the t-SNE algorithm.
 */
 
+#include <functional>
 #include "tsne.h"
 #include "jml/stats/distribution.h"
 #include "jml/stats/distribution_ops.h"
@@ -24,7 +25,6 @@
 #include "jml/arch/sse2_log.h"
 #include "jml/arch/cache.h"
 #include "jml/utils/guard.h"
-#include <boost/bind.hpp>
 #include "jml/utils/environment.h"
 
 using namespace std;
@@ -156,9 +156,9 @@ vectors_to_distances(const boost::multi_array<Float, 2> & X,
     {
         int parent = -1;  // no parent group
         group = worker.get_group(NO_JOB, "", parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(bind(&Worker_Task::unlock_group,
+                              std::ref(worker),
+                              group));
         
         int chunk_size = 64;
         
@@ -399,9 +399,9 @@ distances_to_probabilities(boost::multi_array<float, 2> & D,
     {
         int parent = -1;  // no parent group
         group = worker.get_group(NO_JOB, "", parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(bind(&Worker_Task::unlock_group,
+                              std::ref(worker),
+                              group));
         
         int chunk_size = 64;
         
@@ -698,9 +698,9 @@ double tsne_calc_stiffness(boost::multi_array<float, 2> & D,
     {
         int parent = -1;  // no parent group
         group = worker.get_group(NO_JOB, "", parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(bind(&Worker_Task::unlock_group,
+                              std::ref(worker),
+                              group));
         
         int chunk_size = 64;
         
@@ -728,9 +728,9 @@ double tsne_calc_stiffness(boost::multi_array<float, 2> & D,
     {
         int parent = -1;  // no parent group
         group = worker.get_group(NO_JOB, "", parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(bind(&Worker_Task::unlock_group,
+                              std::ref(worker),
+                              group));
         
         int chunk_size = 64;
         
@@ -918,9 +918,9 @@ void tsne_calc_gradient(boost::multi_array<float, 2> & dY,
     {
         int parent = -1;  // no parent group
         group = worker.get_group(NO_JOB, "", parent);
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(bind(&Worker_Task::unlock_group,
+                              std::ref(worker),
+                              group));
         
         int chunk_size = 64;
         

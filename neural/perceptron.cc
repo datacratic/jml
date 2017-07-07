@@ -27,7 +27,6 @@
 #include "jml/boosting/config_impl.h"
 #include "jml/utils/worker_task.h"
 #include "jml/utils/guard.h"
-#include <boost/bind.hpp>
 #include "jml/arch/backtrace.h"
 #include "dense_layer.h"
 

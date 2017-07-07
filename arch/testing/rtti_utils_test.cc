@@ -14,7 +14,6 @@
 #include "jml/arch/exception_handler.h"
 
 #include <boost/test/unit_test.hpp>
-#include <boost/bind.hpp>
 #include <iostream>
 #include <dirent.h>
 #include "jml/utils/guard.h"

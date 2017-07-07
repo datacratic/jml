@@ -14,7 +14,6 @@
 #include "jml/db/persistent.h"
 #include "jml/db/compact_size_types.h"
 #include <boost/test/unit_test.hpp>
-#include <boost/bind.hpp>
 #include <sstream>
 #include <boost/multi_array.hpp>
 #include "jml/algebra/matrix_ops.h"

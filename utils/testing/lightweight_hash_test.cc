@@ -12,7 +12,6 @@
 #include "jml/utils/lightweight_hash.h"
 #include "jml/utils/string_functions.h"
 #include <boost/test/unit_test.hpp>
-#include <boost/bind.hpp>
 #include <iostream>
 #include <boost/tuple/tuple.hpp>
 #include "jml/arch/exception_handler.h"

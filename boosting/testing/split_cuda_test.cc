@@ -9,11 +9,11 @@
 #define BOOST_TEST_DYN_LINK
 
 #include <boost/test/unit_test.hpp>
-#include <boost/bind.hpp>
 #include <boost/shared_array.hpp>
 #include <boost/scoped_array.hpp>
 #include <boost/timer.hpp>
 #include <vector>
+#include <thread>
 #include <stdint.h>
 #include <iostream>
 #include <limits>
@@ -88,7 +88,7 @@ void run_test(const uint16_t * buckets,
 
     vector<Test_Context> contexts(num_in_parallel);
 
-    boost::thread_group tg;
+    vector<thread> tg;
 
     for (unsigned i = 0;  i < num_in_parallel;  ++i) {
         Test_Context & context = contexts[i];
@@ -98,10 +98,14 @@ void run_test(const uint16_t * buckets,
         context.tester = &tester;
         
         if (on_device) context();
-        else tg.create_thread(boost::ref(context));
+        else tg.emplace_back(std::ref(context));
     }
 
-    if (!on_device) tg.join_all();
+    if (!on_device) {
+        for (auto & th: tg) {
+            th.join();
+        }
+    }
     
     for (unsigned i = 0;  i < num_in_parallel;  ++i)
         tester.synchronize(*contexts[i].context);

@@ -10,7 +10,6 @@
 #include <iostream>
 #include "format.h"
 #include "jml/utils/guard.h"
-#include <boost/bind.hpp>
 #include "jml/utils/environment.h"
 
 
@@ -163,7 +162,7 @@ struct Register_CAL {
                 continue;
             }
             
-            Call_Guard guard(boost::bind(&calDeviceClose, device));
+            Call_Guard guard(bind(&calDeviceClose, device));
             
             CALdevicestatus status;
             status.struct_size = sizeof(CALdevicestatus);

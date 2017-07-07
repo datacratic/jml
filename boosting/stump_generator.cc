@@ -25,7 +25,6 @@
 #include "jml/utils/info.h"
 #include "jml/arch/tick_counter.h"
 #include "jml/utils/smart_ptr_utils.h"
-#include <boost/bind.hpp>
 
 using namespace std;
 

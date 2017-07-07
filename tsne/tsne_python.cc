@@ -6,6 +6,7 @@
 */
 
 #include <Python.h>
+#include <functional>
 #include <numpy/arrayobject.h>
 #include "tsne.h"
 #include <iostream>
@@ -14,7 +15,6 @@
 #include "jml/arch/demangle.h"
 #include <cxxabi.h>
 #include <typeinfo>
-#include <boost/bind.hpp>
 
 
 using namespace std;
@@ -381,9 +381,11 @@ tsne_tsne(PyObject *self, PyObject *args, PyObject * kwds)
 
         boost::multi_array<float, 2> result
             = tsne(array, num_dims, params,
-                   boost::bind(tsne_callback,
-                               threads.signals_before,
-                               _1, _2, _3));
+                   bind(tsne_callback,
+                        threads.signals_before,
+                        placeholders::_1,
+                        placeholders::_2,
+                        placeholders::_3));
         
         if (threads.interrupted())
             throw Interrupt_Exception();

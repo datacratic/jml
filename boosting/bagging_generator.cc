@@ -6,6 +6,7 @@
    Generator for boosted stumps.
 */
 
+#include <functional>
 #include "bagging_generator.h"
 #include "registry.h"
 #include <boost/timer.hpp>
@@ -19,7 +20,6 @@
 #include <boost/random/variate_generator.hpp>
 #include "jml/utils/worker_task.h"
 #include "jml/utils/guard.h"
-#include <boost/bind.hpp>
 #include "jml/utils/smart_ptr_utils.h"
 
 
@@ -265,9 +265,9 @@ generate(Thread_Context & context,
                                         context.group()),
                                  context.group());
         //cerr << "bagging: group = " << group << endl;
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(bind(&Worker_Task::unlock_group,
+                              std::ref(worker),
+                              group));
         for (unsigned i = 0;  i < num_bags;  ++i)
             worker.add(Bag_Job(info, contexts[i], i, verbosity),
                        format("Bagging_Generator::generate() bag %d under %d",

@@ -15,7 +15,6 @@
 #include "jml/db/compact_size_types.h"
 #include "jml/utils/hex_dump.h"
 #include <boost/test/unit_test.hpp>
-#include <boost/bind.hpp>
 #include <sstream>
 
 using namespace ML;

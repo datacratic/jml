@@ -5,13 +5,13 @@
    Discriminative training for neural network architectures via backprop.
 */
 
+#include <functional>
+#include <tuple>
 #include "discriminative_trainer.h"
 #include "jml/utils/worker_task.h"
 #include "jml/utils/guard.h"
 #include <boost/progress.hpp>
-#include <boost/tuple/tuple.hpp>
 #include "jml/arch/threads.h"
-#include <boost/bind.hpp>
 #include "jml/arch/timers.h"
 #include "jml/stats/auc.h"
 
@@ -185,7 +185,7 @@ struct Train_Examples_Job {
 
             //cerr << "x " << x << " weight " << weight << endl;
 
-            boost::tie(rmse_contribution, output)
+            tie(rmse_contribution, output)
                 = trainer.train_example(data[x],
                                         labels[x],
                                         local_updates,
@@ -285,9 +285,9 @@ train_iter(const std::vector<const float *> & data,
                     
             // Make sure the group gets unlocked once we've populated
             // everything
-            Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                         boost::ref(worker),
-                                         group));
+            Call_Guard guard(bind(&Worker_Task::unlock_group,
+                                  std::ref(worker),
+                                  group));
                     
                     
             for (unsigned x2 = x;  x2 < nx2 && x2 < x + minibatch_size;
@@ -407,7 +407,7 @@ train(const std::vector<distribution<float> > & training_data,
         Timer timer;
 
         double train_error_rmse, train_error_auc;
-        boost::tie(train_error_rmse, train_error_auc)
+        tie(train_error_rmse, train_error_auc)
             = train_iter(training_data, training_labels, training_weights,
                          output_encoder, thread_context,
                          minibatch_size, learning_rate,
@@ -433,7 +433,7 @@ train(const std::vector<distribution<float> > & training_data,
                 cerr << "testing on " << nxt << " examples"
                      << endl;
 
-            boost::tie(test_error_rmse, test_error_auc)
+            tie(test_error_rmse, test_error_auc)
                 = test(testing_data, testing_labels, testing_weights,
                        output_encoder, thread_context, verbosity);
             
@@ -563,9 +563,9 @@ test(const std::vector<const float *> & data,
         
         // Make sure the group gets unlocked once we've populated
         // everything
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(bind(&Worker_Task::unlock_group,
+                              std::ref(worker),
+                              group));
         
         // 20 jobs per CPU
         int batch_size = nx / (num_threads() * 20);

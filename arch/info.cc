@@ -17,6 +17,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#include <functional>
 #include <fstream>
 #include <iostream>
 
@@ -26,7 +27,6 @@
 #include "jml/arch/format.h"
 #include "jml/utils/guard.h"
 
-#include <boost/bind.hpp>
 
 #include "info.h"
 
@@ -124,7 +124,7 @@ size_t num_open_files()
         throw Exception("num_open_files(): opendir(): "
                         + string(strerror(errno)));
 
-    Call_Guard closedir_dfd(boost::bind(closedir, dfd));
+    Call_Guard closedir_dfd(bind(closedir, dfd));
 
     size_t result = 0;
     

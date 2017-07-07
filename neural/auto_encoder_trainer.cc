@@ -5,17 +5,17 @@
    Trainer for an auto-encoder.
 */
 
+#include <functional>
+#include <tuple>
 #include "auto_encoder_trainer.h"
 #include "jml/utils/configuration.h"
 #include "jml/arch/threads.h"
 
 #include <boost/progress.hpp>
 #include "jml/utils/worker_task.h"
-#include <boost/tuple/tuple.hpp>
 #include "jml/utils/guard.h"
 #include "jml/utils/configuration.h"
 #include "jml/arch/timers.h"
-#include <boost/bind.hpp>
 #include "auto_encoder_stack.h"
 #include "jml/utils/check_not_nan.h"
 #include "jml/stats/distribution_ops.h"
@@ -201,7 +201,7 @@ struct Train_Examples_Job {
         for (unsigned x = first;  x < last;  ++x) {
 
             double eex, eno;
-            boost::tie(eex, eno)
+            tie(eex, eno)
                 = trainer.train_example(layer, data[x],
                                         local_updates,
                                         thread_context);
@@ -276,9 +276,9 @@ train_iter(Auto_Encoder & encoder,
                     
             // Make sure the group gets unlocked once we've populated
             // everything
-            Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                         boost::ref(worker),
-                                         group));
+            Call_Guard guard(bind(&Worker_Task::unlock_group,
+                                  std::ref(worker),
+                                  group));
                     
                     
             for (unsigned x2 = x;  x2 < nx2 && x2 < x + minibatch_size;
@@ -373,9 +373,9 @@ train_iter(Auto_Encoder & encoder,
                     
             // Make sure the group gets unlocked once we've populated
             // everything
-            Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                         boost::ref(worker),
-                                         group));
+            Call_Guard guard(bind(&Worker_Task::unlock_group,
+                                  std::ref(worker),
+                                  group));
                     
                     
             for (unsigned x2 = x;  x2 < nx2 && x2 < x + minibatch_size;
@@ -477,11 +477,11 @@ train(Auto_Encoder & encoder,
         double train_error_exact, train_error_noisy;
 
         if (!individual_learning_rates)
-            boost::tie(train_error_exact, train_error_noisy)
+            tie(train_error_exact, train_error_noisy)
                 = train_iter(encoder, training_data, thread_context,
                              learning_rate);
         else 
-            boost::tie(train_error_exact, train_error_noisy)
+            tie(train_error_exact, train_error_noisy)
                 = train_iter(encoder, training_data, thread_context,
                              learning_rates);
         
@@ -505,7 +505,7 @@ train(Auto_Encoder & encoder,
                 cerr << "testing on " << nxt << " examples"
                      << endl;
             
-            boost::tie(train_error_exact, train_error_noisy)
+            tie(train_error_exact, train_error_noisy)
                 = test(encoder, training_data, thread_context);
             
             if (verbosity >= 3) {
@@ -524,7 +524,7 @@ train(Auto_Encoder & encoder,
                 cerr << "testing on " << nxt << " examples"
                      << endl;
             
-            boost::tie(test_error_exact, test_error_noisy)
+            tie(test_error_exact, test_error_noisy)
                 = test(encoder, testing_data, thread_context);
             
             if (verbosity >= 3) {
@@ -803,7 +803,7 @@ train_stack(Auto_Encoder_Stack & stack,
             
             if (verbosity >= 1) {
                 double test_error_exact = 0.0, test_error_noisy = 0.0;
-                boost::tie(test_error_exact, test_error_noisy)
+                tie(test_error_exact, test_error_noisy)
                     = test(test_stack, testing_data, thread_context);
                 
                 cerr << "testing rmse of stack: exact "
@@ -822,7 +822,7 @@ train_stack(Auto_Encoder_Stack & stack,
             cerr << "calculating next layer training inputs on "
                  << nx << " examples" << endl;
         double train_error_exact = 0.0, train_error_noisy = 0.0;
-        boost::tie(train_error_exact, train_error_noisy)
+        tie(train_error_exact, train_error_noisy)
             = test_and_update(layer, layer_train, next_layer_train,
                               thread_context);
         
@@ -835,7 +835,7 @@ train_stack(Auto_Encoder_Stack & stack,
             cerr << "calculating next layer testing inputs on "
                  << nxt << " examples" << endl;
         double test_error_exact = 0.0, test_error_noisy = 0.0;
-        boost::tie(test_error_exact, test_error_noisy)
+        tie(test_error_exact, test_error_noisy)
             = test_and_update(layer, layer_test, next_layer_test,
                               thread_context);
         
@@ -853,7 +853,7 @@ train_stack(Auto_Encoder_Stack & stack,
                  << nxt << " examples" << endl;
         
         if (verbosity >= 1) {
-            boost::tie(test_error_exact, test_error_noisy)
+            tie(test_error_exact, test_error_noisy)
                 = test(test_stack, testing_data, thread_context);
 
             cerr << "testing rmse of stack: exact "
@@ -1023,9 +1023,9 @@ test_and_update(const Auto_Encoder & encoder,
         
         // Make sure the group gets unlocked once we've populated
         // everything
-        Call_Guard guard(boost::bind(&Worker_Task::unlock_group,
-                                     boost::ref(worker),
-                                     group));
+        Call_Guard guard(bind(&Worker_Task::unlock_group,
+                              std::ref(worker),
+                              group));
         
         // 20 jobs per CPU
         int batch_size = nx / (num_threads() * 20);
