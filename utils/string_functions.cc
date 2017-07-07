@@ -206,4 +206,31 @@ antoi(const char * start, const char * end, int base)
     return result;
 }
 
+string
+trim(const string & other)
+{
+    size_t len = other.size();
+
+    size_t start(0);
+    while (start < len && isspace_nolocale(other[start])) {
+        start++;
+    }
+
+    size_t end(len);
+    while (end > start && isspace_nolocale(other[end-1])) {
+        end--;
+    }
+
+    if (start == 0 && end == len) {
+        return other;
+    }
+
+    string result;
+    if (start != end) {
+        result = other.substr(start, end-start);
+    }
+
+    return result;
+}
+
 } // namespace ML

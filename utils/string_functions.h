@@ -45,6 +45,14 @@ std::string lowercase(const std::string & str);
 
 std::string remove_trailing_whitespace(const std::string & str);
 
+/** Implementation of "isspace" that emulates the use of the "C" locale only,
+ * without actually executing any locale code. */
+inline int isspace_nolocale(int c)
+{
+    return (c == ' ' || c == '\t' || c == '\n' || c == '\r'
+            || c == '\v' || c == '\f');
+}
+
 /** If the given string ends with the ending, then remove that ending from the
     string and return true.  Otherwise return false.
 */
@@ -60,6 +68,10 @@ std::string hexify_string(const std::string & str);
    from "atoi" with the "n" indicating that it is reading only from a numbered
    set of bytes. Base 10 can be negative. */
 int antoi(const char * start, const char * end, int base = 10);
+
+/* Remove space and tab characters from both ends of a copy of the given
+ * string. */
+std::string trim(const std::string & other);
 
 } // namespace ML
 
