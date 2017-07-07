@@ -8,10 +8,10 @@
 #ifndef __jml__neural__transfer_function_h__
 #define __jml__neural__transfer_function_h__
 
+#include <memory>
 #include "perceptron_defs.h"
 #include "jml/stats/distribution.h"
 #include "jml/db/persistent_fwd.h"
-#include <boost/shared_ptr.hpp>
 
 namespace ML {
 

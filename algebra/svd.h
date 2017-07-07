@@ -10,9 +10,9 @@
 #define __algebra__svd_h__
 
 
+#include <tuple>
 #include "jml/stats/distribution.h"
 #include <boost/multi_array.hpp>
-#include <boost/tuple/tuple.hpp>
 
 
 namespace ML {
@@ -50,7 +50,7 @@ namespace ML {
 
     distribution<float> E;
     boost::multi_array<float, 2> U, V;
-    boost::tie(E, U, V) = svd(A);
+    std::tie(E, U, V) = svd(A);
     \endcode
 
     \param A        the matrix of which to take the SVD
@@ -67,21 +67,21 @@ namespace ML {
     pretty good instructions on how to do all of this, although it neglects
     to mention that U and V need to be multiplied by \f$\sqrt{2}\f$!
 */
-boost::tuple<distribution<float>, boost::multi_array<float, 2>,
+std::tuple<distribution<float>, boost::multi_array<float, 2>,
              boost::multi_array<float, 2> >
 svd(const boost::multi_array<float, 2> & A);
 
-boost::tuple<distribution<double>, boost::multi_array<double, 2>,
+std::tuple<distribution<double>, boost::multi_array<double, 2>,
              boost::multi_array<double, 2> >
 svd(const boost::multi_array<double, 2> & A);
 
 /** Same as above, but calculates only the first \p n singular values.
  */
-boost::tuple<distribution<float>, boost::multi_array<float, 2>,
+std::tuple<distribution<float>, boost::multi_array<float, 2>,
              boost::multi_array<float, 2> >
 svd(const boost::multi_array<float, 2> & A, size_t n);
 
-boost::tuple<distribution<double>, boost::multi_array<double, 2>,
+std::tuple<distribution<double>, boost::multi_array<double, 2>,
              boost::multi_array<double, 2> >
 svd(const boost::multi_array<double, 2> & A, size_t n);
 

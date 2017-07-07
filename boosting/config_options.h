@@ -13,7 +13,6 @@
 #include "config.h"
 #include <string>
 #include <vector>
-#include <boost/shared_ptr.hpp>
 #include <boost/lexical_cast.hpp>
 #include "jml/utils/configuration.h"
 #include "jml/utils/enum_info.h"

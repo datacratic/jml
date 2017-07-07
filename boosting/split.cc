@@ -53,7 +53,7 @@ apply(const Feature_Set & fset,
       float weight) const
 {
     Feature_Set::const_iterator first, last;
-    boost::tie(first, last) = fset.find(feature_);
+    std::tie(first, last) = fset.find(feature_);
     return apply(first, last, weights, weight);
 }
 

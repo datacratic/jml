@@ -17,7 +17,6 @@
 #include "output_encoder.h"
 #include "jml/utils/pair_utils.h"
 #include <boost/multi_array.hpp>
-#include <boost/shared_ptr.hpp>
 
 
 namespace ML {

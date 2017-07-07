@@ -9,13 +9,12 @@
 #ifndef __boosting_tool_common_h__
 #define __boosting_tool_common_h__
 
-#include "jml/stats/sparse_distribution.h"
-#include <vector>
+#include <memory>
 #include <set>
 #include <string>
-#include <boost/shared_ptr.hpp>
-#include <boost/tuple/tuple.hpp>
+#include <vector>
 
+#include "jml/stats/sparse_distribution.h"
 
 
 namespace ML {

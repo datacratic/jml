@@ -23,6 +23,7 @@
 #ifndef __utils__parse_context_h__
 #define __utils__parse_context_h__
 
+#include <memory>
 #include "jml/utils/unnamed_bool.h"
 #include "jml/arch/exception.h"
 #include "jml/compiler/compiler.h"
@@ -34,7 +35,6 @@
 #include <string.h>
 #include <stdint.h>
 #include <boost/utility.hpp>
-#include <boost/shared_ptr.hpp>
 
 
 namespace ML {

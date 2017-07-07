@@ -288,7 +288,7 @@ generate(Thread_Context & context,
         {
             PROFILE_FUNCTION(t_train);
             
-            boost::tie(train_acc, train_rmse)
+            std::tie(train_acc, train_rmse)
                 = trainer.train_iter(examples, labels, training_ex_weights,
                                      output_encoder,
                                      context, our_batch_size, learning_rate,
@@ -300,7 +300,7 @@ generate(Thread_Context & context,
             validate_rmse = train_rmse;
         }
         else {
-            boost::tie(validate_acc, validate_rmse)
+            std::tie(validate_acc, validate_rmse)
                 = trainer.test(val_examples, val_labels, validate_ex_weights,
                                output_encoder, context, verbosity);
         }
@@ -340,9 +340,9 @@ generate(Thread_Context & context,
         << endl;
 
     float trn_acc, trn_rmse, val_acc, val_rmse;
-    boost::tie(trn_acc, trn_rmse)
+    std::tie(trn_acc, trn_rmse)
         = best.accuracy(training_set);
-    boost::tie(val_acc, val_rmse)
+    std::tie(val_acc, val_rmse)
         = best.accuracy(validation_set);
 
     log("perceptron_generator", 1)
@@ -467,7 +467,7 @@ decorrelate(const Training_Data & data,
         }
         else {
             float min, max;
-            boost::tie(min, max) = index.range(feature);
+            std::tie(min, max) = index.range(feature);
             if (abs(min) > 1e10 || abs(max) > 1e10) {
                 cerr << "feature " << i << " ("
                      << result.feature_space()->print(feature)

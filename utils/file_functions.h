@@ -23,8 +23,9 @@
 #ifndef __utils__file_functions_h__
 #define __utils__file_functions_h__
 
-#include <boost/shared_ptr.hpp>
+#include <functional>
 #include <string>
+#include <memory>
 #include <stdint.h>
 #include <ftw.h>
 

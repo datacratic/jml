@@ -216,7 +216,7 @@ type() const
 /* FACTORIES                                                                 */
 /*****************************************************************************/
 
-boost::tuple<std::string, std::string>
+std::tuple<std::string, std::string>
 get_type(const std::string & name, const Configuration & config)
 {
     std::string name2 = name;
@@ -240,14 +240,14 @@ get_type(const std::string & name, const Configuration & config)
     name2 = key;
     name2.resize(std::max<int>(0, name2.size() - 5));  // remove the ".type"
     
-    return boost::make_tuple(config[key], name2);
+    return std::make_tuple(config[key], name2);
 }
 
 std::shared_ptr<Classifier_Generator>
 get_trainer(const std::string & name, const Configuration & config)
 {
     std::string type, name2;
-    boost::tie(type, name2) = get_type(name, config);
+    std::tie(type, name2) = get_type(name, config);
     
     if (type == "") {
         //cerr << config << endl;

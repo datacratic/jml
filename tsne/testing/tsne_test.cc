@@ -12,7 +12,6 @@
 
 #include <boost/test/unit_test.hpp>
 #include <boost/multi_array.hpp>
-#include <boost/tuple/tuple.hpp>
 #include "jml/tsne/tsne.h"
 #include <boost/assign/list_of.hpp>
 #include <limits>
@@ -144,7 +143,7 @@ BOOST_AUTO_TEST_CASE( test_perplexity_and_prob1 )
     distribution<double> resP;
     double resH;
 
-    boost::tie(resH, resP)
+    std::tie(resH, resP)
         = perplexity_and_prob(Dv, betai, 0);
 
     double tolerance = 0.000001;

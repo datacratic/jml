@@ -15,7 +15,6 @@
 #include "feature_set.h"
 #include "feature_info.h"
 #include "jml/utils/hash_map.h"
-#include <boost/shared_ptr.hpp>
 #include "training_index_iterators.h"
 #include "buckets.h"
 

@@ -26,7 +26,6 @@
 #include <map>
 #include <vector>
 #include <string>
-#include <boost/shared_ptr.hpp>
 #include <boost/lexical_cast.hpp>
 #include "jml/arch/exception.h"
 #include <iostream>

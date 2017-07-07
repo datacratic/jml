@@ -24,7 +24,8 @@
 #define __db__portable_iarchive_h__
 
 #include <algorithm>
-#include <boost/shared_ptr.hpp>
+#include <memory>
+
 #include "serialization_order.h"
 #include "jml/utils/floating_point.h"
 #include "jml/arch/exception.h"

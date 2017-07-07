@@ -6,7 +6,6 @@
 */
 
 #include "simd.h"
-#include <boost/tuple/tuple.hpp>
 #include "jml/arch/exception.h"
 #include <iostream>
 #include <iomanip>

@@ -11,13 +11,11 @@
 
 
 #include "config.h"
-#include <boost/tuple/tuple.hpp>
-#include <boost/tuple/tuple_comparison.hpp>
-#include <boost/tuple/tuple_io.hpp>
 #include "jml/db/persistent.h"
 #include "jml/stats/distribution.h"
 #include <vector>
 #include <set>
+#include <tuple>
 #include "jml/utils/floating_point.h"
 #include "jml/utils/string_functions.h"
 #include "jml/utils/sgi_algorithm.h"
@@ -179,12 +177,12 @@ public:
         - int:             bytes to advance value * to get to the next one
         - size_t:          the number of values in the array
     */
-    virtual boost::tuple<const Feature *, const float *, int, int, size_t>
+    virtual std::tuple<const Feature *, const float *, int, int, size_t>
     get_data(bool need_sorted = false) const = 0;
     
     virtual size_t size() const
     {
-        return get_data(false).get<4>();
+        return std::get<4>(get_data(false));
     }
 
     std::pair<Feature, float> at(int index) const
@@ -227,7 +225,7 @@ public:
         int feat_stride;
         int val_stride;
         size_t size;
-        boost::tie(feat, val, feat_stride, val_stride, size) = get_data(true);
+        std::tie(feat, val, feat_stride, val_stride, size) = get_data(true);
         return const_iterator(feat, val, feat_stride, val_stride);
     }
 
@@ -238,7 +236,7 @@ public:
         int feat_stride;
         int val_stride;
         size_t size;
-        boost::tie(feat, val, feat_stride, val_stride, size) = get_data(true);
+        std::tie(feat, val, feat_stride, val_stride, size) = get_data(true);
         return const_iterator(feat, val, feat_stride, val_stride) + size;
     }    
 
@@ -354,12 +352,12 @@ public:
 
     virtual ~Mutable_Feature_Set() {}
 
-    virtual boost::tuple<const Feature *, const float *, int, int, size_t>
+    virtual std::tuple<const Feature *, const float *, int, int, size_t>
     get_data(bool need_sorted = false) const
     {
         if (need_sorted && !is_sorted) sort();
 
-        return boost::make_tuple
+        return std::make_tuple
             (&features[0].first, &features[0].second,
              sizeof(std::pair<Feature, float>),
              sizeof(std::pair<Feature, float>),

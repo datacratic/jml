@@ -73,7 +73,7 @@ struct tuple_to_pair {
 
     typedef std::pair<X, Y> result_type;
 
-    result_type operator () (const boost::tuple<X, Y> & t) const
+    result_type operator () (const std::tuple<X, Y> & t) const
     {
         return std::make_pair(t.template get<0>(), t.template get<1>());
     }
@@ -82,14 +82,14 @@ struct tuple_to_pair {
 template<class Iterator1, class Iterator2>
 boost::transform_iterator<tuple_to_pair<typename Iterator1::value_type,
                                         typename Iterator2::value_type>,
-                          boost::zip_iterator<boost::tuple<Iterator1,
+                          boost::zip_iterator<std::tuple<Iterator1,
                                                            Iterator2> > >
 pair_merger(const Iterator1 & it1, const Iterator2 & it2)
 {
     return boost::make_transform_iterator
         <tuple_to_pair<typename Iterator1::value_type,
                        typename Iterator2::value_type> >
-            (boost::make_zip_iterator(boost::make_tuple(it1, it2)));
+            (boost::make_zip_iterator(std::make_tuple(it1, it2)));
 }
 
 #else

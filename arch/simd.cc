@@ -6,7 +6,6 @@
 */
 
 #include "simd.h"
-#include <boost/tuple/tuple.hpp>
 
 namespace ML {
 

@@ -10,6 +10,8 @@
 #ifndef __boosting__feature_space_h__
 #define __boosting__feature_space_h__
 
+#include <memory>
+
 #include "config.h"
 #include "feature_set.h"
 #include "feature_info.h"

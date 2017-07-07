@@ -17,7 +17,6 @@
 #include "jml/utils/vector_utils.h"
 #include "jml/utils/filter_streams.h"
 #include "jml/utils/smart_ptr_utils.h"
-#include <boost/tuple/tuple.hpp>
 #include "stdint.h"
 
 using namespace std;
@@ -749,7 +748,7 @@ struct Buffer {
     Contained * end_;
 };
 
-boost::tuple<size_t, size_t, string>
+std::tuple<size_t, size_t, string>
 get_sizes(Parse_Context & context,
           vector<unsigned> & row_start_ofs)
 {
@@ -761,7 +760,7 @@ get_sizes(Parse_Context & context,
 
     unsigned var_count = 0;
 
-    if (context.eof()) return boost::make_tuple(0, 0, header);  // empty file
+    if (context.eof()) return std::make_tuple(0, 0, header);  // empty file
 
     //cerr << "header = " << header << endl;
 
@@ -787,7 +786,7 @@ get_sizes(Parse_Context & context,
         ++var_count;
     }
 
-    if (var_count == 0) return boost::make_tuple(0, 0, header);  // empty file
+    if (var_count == 0) return std::make_tuple(0, 0, header);  // empty file
 
     /* Count the number of rows.  This is simply just skipping lines until
        we are finished. */
@@ -803,11 +802,11 @@ get_sizes(Parse_Context & context,
         ++row_count;
     }
     
-    return boost::make_tuple(row_count, var_count, header);
+    return std::make_tuple(row_count, var_count, header);
 }
 
 #if 0
-boost::tuple<size_t, size_t, string>
+std::tuple<size_t, size_t, string>
 get_sizes(const std::string & filename,
           vector<unsigned> & row_start_ofs)
 {
@@ -939,7 +938,7 @@ init(const std::vector<Data_Source> & data_sources,
 
         Parse_Context context = data_sources[i].get_context();
 
-        boost::tie(my_row_count, my_var_count, my_header)
+        std::tie(my_row_count, my_var_count, my_header)
             = get_sizes(context, row_start_ofs[i]);
 
         cerr << "file: " << data_sources[i].filename

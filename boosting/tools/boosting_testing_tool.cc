@@ -241,7 +241,7 @@ void trace_output(const Classifier & current, const Training_Data & data,
         if (result[1] < min_output || result[1] > max_output) continue;
 
         int highest, highest_2;
-        boost::tie(highest, highest_2) = idxmax2(result.begin(), result.end());
+        std::tie(highest, highest_2) = idxmax2(result.begin(), result.end());
 
         int label    = (int)data[x][predicted]; 
         bool correct = highest == label;
@@ -299,7 +299,7 @@ void trace_output(const Classifier & current, const Training_Data & data,
                 for (unsigned i = 0;
                      i < std::min(features.size(), (size_t)20);  ++i) {
                     Feature_Set::const_iterator first, last;
-                    boost::tie(first, last)
+                    std::tie(first, last)
                         = data[x].find(features[i].first);
                     if (first == last)
                         throw Exception("Feature not found");

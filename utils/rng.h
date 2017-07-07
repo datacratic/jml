@@ -8,10 +8,11 @@
 #ifndef __jml__utils__rng_h__
 #define __jml__utils__rng_h__
 
+#include <boost/thread/tss.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/uniform_01.hpp>
-#include <boost/thread/tss.hpp>
+
 
 namespace ML {
 

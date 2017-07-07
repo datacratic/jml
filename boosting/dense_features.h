@@ -379,10 +379,10 @@ public:
 
     virtual ~Dense_Feature_Set() {}
 
-    virtual boost::tuple<const Feature *, const float *, int, int, size_t>
+    virtual std::tuple<const Feature *, const float *, int, int, size_t>
     get_data(bool need_sorted = false) const
     {
-        return boost::make_tuple
+        return std::make_tuple
             (&(*features)[0], values, sizeof(Feature), sizeof(float), 
              features->size());
     }

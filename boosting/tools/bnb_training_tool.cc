@@ -678,7 +678,7 @@ try
     vector<Feature> features;
     map<string, Feature> feature_index;
 
-    boost::tie(features, feature_index)
+    std::tie(features, feature_index)
         = do_features(*data[0], feature_space, ignore_features,
                       optional_features, min_feature_count, verbosity);
 
@@ -712,7 +712,7 @@ try
     vector<Feature> equalize_features;
     vector<float> equalize_betas;
 
-    boost::tie(equalize_betas, equalize_features)
+    std::tie(equalize_betas, equalize_features)
         = parse_weight_spec(feature_index, equalize_name, equalize_beta,
                             weight_spec);
 
@@ -752,7 +752,7 @@ try
         vector<Feature> equalize_features;
         vector<float> equalize_betas;
         
-        boost::tie(equalize_betas, equalize_features)
+        std::tie(equalize_betas, equalize_features)
             = parse_weight_spec(feature_index, equalize_name, equalize_beta,
                                 weight_spec);
         

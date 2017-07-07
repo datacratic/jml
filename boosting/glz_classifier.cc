@@ -88,7 +88,7 @@ extract(const Feature_Set & feature_set) const
             } while (last != fend && last.feature() == to_find);
         }
         else {
-            boost::tie(first, last) = feature_set.find(features[i].feature);
+            std::tie(first, last) = feature_set.find(features[i].feature);
         }
 
         prev_last = last;

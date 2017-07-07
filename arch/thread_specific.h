@@ -14,13 +14,14 @@
 #ifndef __arch__thread_specific_h__
 #define __arch__thread_specific_h__
 
+#include <assert.h>
+#include <boost/thread/tss.hpp>
 #include "exception.h"
 #include "spinlock.h"
-#include "jml/utils/exc_assert.h"
+#include <deque>
 #include <thread>
 #include "spinlock.h"
 
-#include <boost/thread.hpp>
 #include <unordered_set>
 #include <mutex>
 

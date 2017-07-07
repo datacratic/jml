@@ -10,7 +10,6 @@
 #ifndef __jml__stump_training_cuda_h__
 #define __jml__stump_training_cuda_h__
 
-#include <boost/shared_ptr.hpp>
 #include "fixed_point_accum.h"
 
 namespace ML {

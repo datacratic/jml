@@ -24,7 +24,6 @@
 #define __utils__smart_ptr_utils_h__
 
 
-#include <boost/shared_ptr.hpp>
 #include "jml/compiler/compiler.h"
 #include <memory>
 

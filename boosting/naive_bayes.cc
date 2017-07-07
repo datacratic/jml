@@ -82,7 +82,7 @@ predict(const Feature_Set & feature_set,
         for (unsigned f = 0;  f < features.size();  ++f) {
             const Feature & feature = features[f].feature;
             Feature_Set::const_iterator first, last;
-            boost::tie(first, last) = feature_set.find(feature);
+            std::tie(first, last) = feature_set.find(feature);
             
             float weight_true = 0.0, weight_false = 0.0, weight_missing = 0.0;
             

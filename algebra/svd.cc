@@ -22,7 +22,7 @@ namespace ML {
 
 
 template<class Float>
-boost::tuple<distribution<Float>, boost::multi_array<Float, 2>,
+std::tuple<distribution<Float>, boost::multi_array<Float, 2>,
              boost::multi_array<Float, 2> >
 svd_impl(const boost::multi_array<Float, 2> & A, int nsv)
 {
@@ -78,7 +78,7 @@ svd_impl(const boost::multi_array<Float, 2> & A, int nsv)
     /* Get the eigeneverything. */
     distribution<Float> E;
     vector<distribution<Float> > W;
-    boost::tie(E, W) = eigenvectors(A_, nsv);
+    std::tie(E, W) = eigenvectors(A_, nsv);
 
     if (profile) {
         cerr << "SVD: eigenvalues: " << -t0 + (t.elapsed()) << endl;
@@ -153,31 +153,31 @@ svd_impl(const boost::multi_array<Float, 2> & A, int nsv)
 
     if (profile) cerr << "SVD: total: " << t.elapsed() << endl;
 
-    return boost::make_tuple(E, U, V);
+    return std::make_tuple(E, U, V);
 }
 
-boost::tuple<distribution<float>, boost::multi_array<float, 2>,
+std::tuple<distribution<float>, boost::multi_array<float, 2>,
              boost::multi_array<float, 2> >
 svd(const boost::multi_array<float, 2> & A)
 {
     return svd_impl(A, std::min(A.shape()[0], A.shape()[1]));
 }
 
-boost::tuple<distribution<double>, boost::multi_array<double, 2>,
+std::tuple<distribution<double>, boost::multi_array<double, 2>,
              boost::multi_array<double, 2> >
 svd(const boost::multi_array<double, 2> & A)
 {
     return svd_impl(A, (A.shape()[0], A.shape()[1]));
 }
 
-boost::tuple<distribution<float>, boost::multi_array<float, 2>,
+std::tuple<distribution<float>, boost::multi_array<float, 2>,
              boost::multi_array<float, 2> >
 svd(const boost::multi_array<float, 2> & A, size_t nsv)
 {
     return svd_impl(A, nsv);
 }
 
-boost::tuple<distribution<double>, boost::multi_array<double, 2>,
+std::tuple<distribution<double>, boost::multi_array<double, 2>,
              boost::multi_array<double, 2> >
 svd(const boost::multi_array<double, 2> & A, size_t nsv)
 {

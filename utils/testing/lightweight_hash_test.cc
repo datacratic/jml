@@ -13,7 +13,6 @@
 #include "jml/utils/string_functions.h"
 #include <boost/test/unit_test.hpp>
 #include <iostream>
-#include <boost/tuple/tuple.hpp>
 #include "jml/arch/exception_handler.h"
 #include "jml/arch/demangle.h"
 #include <set>

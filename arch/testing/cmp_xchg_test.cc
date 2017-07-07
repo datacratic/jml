@@ -10,13 +10,14 @@
 
 #include <thread>
 
+#include <boost/thread/barrier.hpp>
+
 #include "jml/arch/cmp_xchg.h"
 #include "jml/arch/demangle.h"
 #include "jml/arch/cpuid.h"
 #include "jml/arch/format.h"
 
 #include <boost/test/unit_test.hpp>
-#include <boost/thread/barrier.hpp>
 #include <vector>
 #include <stdint.h>
 #include <iostream>

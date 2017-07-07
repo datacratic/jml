@@ -12,7 +12,6 @@
 #include "config.h"
 #include "feature_set.h"
 #include "feature_space.h"
-#include <boost/shared_ptr.hpp>
 #include "jml/stats/sparse_distribution.h"
 #include <map>
 #include <cmath>

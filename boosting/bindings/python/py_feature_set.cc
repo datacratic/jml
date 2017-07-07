@@ -48,7 +48,7 @@ struct Feature_Wrapper {
 struct Feature_Set_Wrapper : Feature_Set, wrapper<Feature_Set> {
 
     /* Pure virtual function get_data */
-    virtual boost::tuple<const Feature *, const float *, int, int, size_t>
+    virtual std::tuple<const Feature *, const float *, int, int, size_t>
     get_data(bool need_sorted = false) const
     {
         return this->get_override("get_data")(need_sorted);
@@ -185,7 +185,7 @@ struct Mutable_Feature_Set_Wrapper
     }
 
     struct iterator_wrap : public iterator {
-        typedef boost::tuple<Feature, float> value_type;
+        typedef std::tuple<Feature, float> value_type;
 
         iterator_wrap(iterator it)
             : iterator(it)

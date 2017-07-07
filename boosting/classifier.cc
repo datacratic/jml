@@ -6,6 +6,7 @@
 */
 
 #include <functional>
+#include <boost/thread/tss.hpp>
 
 #include "classifier.h"
 #include "classifier_persist_impl.h"
@@ -18,7 +19,6 @@
 #include "dense_features.h"
 #include "jml/utils/smart_ptr_utils.h"
 #include "jml/utils/vector_utils.h"
-#include <boost/thread/tss.hpp>
 #include "jml/utils/exc_assert.h"
 #include "jml/math/xdiv.h"
 #include "jml/utils/filter_streams.h"

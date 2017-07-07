@@ -12,7 +12,6 @@
 #include "jml/stats/distribution_simd.h"
 #include "jml/algebra/matrix_ops.h"
 #include "jml/arch/simd_vector.h"
-#include <boost/tuple/tuple.hpp>
 #include "jml/algebra/lapack.h"
 #include <cmath>
 #include <boost/random/normal_distribution.hpp>
@@ -279,7 +278,7 @@ binary_search_perplexity(const distribution<float> & Di,
     double log_perplexity;
     double log_required_perplexity = log(required_perplexity);
 
-    boost::tie(log_perplexity, P) = perplexity_and_prob(Di, beta, i);
+    std::tie(log_perplexity, P) = perplexity_and_prob(Di, beta, i);
 
     bool verbose = false;
 
@@ -311,7 +310,7 @@ binary_search_perplexity(const distribution<float> & Di,
             else beta = (beta + betamin) * 0.5;
         }
         
-        boost::tie(log_perplexity, P) = perplexity_and_prob(Di, beta, i);
+        std::tie(log_perplexity, P) = perplexity_and_prob(Di, beta, i);
     }
 
     return make_pair(P, beta);
@@ -352,7 +351,7 @@ struct Distance_To_Probabilities_Job {
             distribution<float> P_row;
 
             try {
-                boost::tie(P_row, beta[i])
+                std::tie(P_row, beta[i])
                     = binary_search_perplexity(D_row, perplexity, i, tolerance);
             } catch (const std::exception & exc) {
                 P_row = D_row;

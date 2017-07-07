@@ -215,7 +215,7 @@ void calc_stats(const Classifier_Impl & current,
             //distribution<float> result = input;
             
             int highest, highest_2;
-            boost::tie(highest, highest_2)
+            std::tie(highest, highest_2)
                 = idxmax2(result.begin(), result.end());
             //int highest_np = idxmax(input.begin(), input.end());
 
@@ -293,7 +293,7 @@ void calc_stats(const Classifier_Impl & current,
                                          label_freq.total()) * 100.0) << endl;
         
         float acc, rmse;
-        boost::tie(acc, rmse) = current.accuracy(data);
+        std::tie(acc, rmse) = current.accuracy(data);
 
         cerr << "non-prob accuracy              = "
              << format("%8.3f%% %8.3f%%",
@@ -371,7 +371,7 @@ void calc_stats(const Classifier_Impl & current,
                 * (correct_dist.total() / correct_dist.size());
 
             int highest, highest_2;
-            boost::tie(highest, highest_2)
+            std::tie(highest, highest_2)
                 = idxmax2(values_dist.begin(), values_dist.end());
             
             bool is_correct = correct_dist[highest] != 0.0;
