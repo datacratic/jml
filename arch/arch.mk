@@ -17,7 +17,7 @@ LIBARCH_SOURCES := \
 	rtti_utils.cc \
 	rt.cc
 
-LIBARCH_LINK := ACE dl
+LIBARCH_LINK := ACE dl boost_thread
 
 ifneq ($(BOOST_VERSION),42)
 LIBARCH_LINK += boost_system

@@ -13,7 +13,6 @@
 #include "jml/arch/timers.h"
 #include "jml/utils/string_functions.h"
 #include <iostream>
-#include <boost/utility.hpp>
 #include "jml/utils/environment.h"
 #include "jml/utils/guard.h"
 #include "jml/arch/cpu_info.h"
