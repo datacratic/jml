@@ -6,7 +6,6 @@
 
 #include "hash.h"
 #include "string_functions.h"
-#include <boost/algorithm/string.hpp>
 
 #define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
 #include "crypto++/sha.h"
