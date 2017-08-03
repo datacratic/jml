@@ -129,6 +129,23 @@ std::shared_ptr<T> make_std_sp(const std::shared_ptr<T> & val)
     return std::shared_ptr<T>(val.get(), Keep_RefB<T>(val));
 }
 
+/* This function takes a rvalue reference to a unique_ptr and assign its value
+ * to a unique_ptr of the required type, after casting. */
+template<class T, class F>
+void cast_unique_ptr_into(std::unique_ptr<F> && val, std::unique_ptr<T> & newVal)
+{
+    auto * castPtr = static_cast<T *>(val.release());
+    newVal.reset(castPtr);
+}
+
+/* This function reduces the amount of code required to instantiate a
+ * unique_ptr of a given type. */
+template<class T>
+std::unique_ptr<T> make_unique_ptr(T * val)
+{
+    return std::unique_ptr<T>(val);
+}
+
 } // namespace ML
 
 #endif /* __utils__smart_ptr_utils_h__ */
