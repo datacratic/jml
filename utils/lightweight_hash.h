@@ -5,12 +5,12 @@
    A lightweight invasive hash map.
 */
 
-#ifndef __jml__utils__lightweight_hash_h__
-#define __jml__utils__lightweight_hash_h__
+#pragma once
 
 #include "jml/arch/exception.h"
 #include <boost/iterator/iterator_facade.hpp>
 #include <iostream> // debug
+#include "jml/db/persistent_fwd.h"
 #include "jml/utils/hash_specializations.h"
 #include "jml/utils/string_functions.h"
 #include "jml/utils/pair_utils.h"
@@ -18,8 +18,10 @@
 #include "jml/arch/bitops.h"
 #include "jml/arch/atomic_ops.h"
 #include <string>
+#include <vector>
 #include <cassert>
 #include <functional>
+
 
 namespace ML {
 
@@ -1162,8 +1164,26 @@ private:
     friend class Lightweight_Hash_Iterator;
 };
 
+template<typename K, typename H, typename B, typename O, typename S>
+ML::DB::Store_Writer &
+operator << (ML::DB::Store_Writer & store,
+             const ML::Lightweight_Hash_Set<K, H, B, O, S> & hs)
+{
+    std::vector<K> v(hs.begin(), hs.end());
+    std::sort(v.begin(), v.end());
+    return store << v;
+}
 
-} // file scope
+template<typename K, typename H, typename B, typename O, typename S>
+ML::DB::Store_Reader &
+operator >> (ML::DB::Store_Reader & store,
+             ML::Lightweight_Hash_Set<K, H, B, O, S> & hs)
+{
+    std::vector<K> v;
+    store >> v;
+    hs.clear();
+    hs.insert(v.begin(), v.end());
+    return store;
+}
 
-
-#endif /* __jml__utils__lightweight_hash_h__ */
+} // namespace ML
