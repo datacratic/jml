@@ -11,9 +11,9 @@
 
 #pragma once
 
-#include "xxhash.h"
-#include "lz4.h"
-#include "lz4hc.h"
+#include "jml/lz4/xxhash.h"
+#include "jml/lz4/lz4.h"
+#include "jml/lz4/lz4hc.h"
 #include "jml/utils/exc_assert.h"
 
 #include <boost/iostreams/concepts.hpp>

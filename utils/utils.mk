@@ -12,20 +12,15 @@ LIBUTILS_SOURCES := \
 	exc_assert.cc \
 	hex_dump.cc \
 	lzma.cc \
-	xxhash.c \
-	lz4.c \
-	lz4hc.c \
 	floating_point.cc \
 	json_parsing.cc \
 	rng.cc \
 	hash.cc \
 	abort.cc
 
-LIBUTILS_LINK :=	ACE arch boost_iostreams lzma boost_thread cryptopp
+LIBUTILS_LINK :=	ACE arch lz4 boost_iostreams lzma boost_thread cryptopp
 
 $(eval $(call library,utils,$(LIBUTILS_SOURCES),$(LIBUTILS_LINK)))
-
-$(eval $(call program,lz4cli,,lz4cli.c lz4.c lz4hc.c xxhash.c))
 
 # gcc 4.7
 $(eval $(call set_compile_option,hash.cc,-fpermissive))
