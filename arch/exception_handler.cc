@@ -8,6 +8,7 @@
 #include <cxxabi.h>
 #include <cstring>
 #include <fstream>
+#include <mutex>
 
 #include "jml/compiler/compiler.h"
 #include "jml/utils/environment.h"
@@ -104,6 +105,9 @@ void default_exception_tracer(void * object, const std::type_info * tinfo)
 {
     //cerr << "trace_exception: trace_exceptions = " << get_trace_exceptions()
     //     << " at " << &trace_exceptions << endl;
+    constexpr size_t bufferSize(1024*1024);
+    static std::mutex bufferLock;
+    static char buffer[bufferSize];
 
     if (!get_trace_exceptions()) return;
 
@@ -112,11 +116,10 @@ void default_exception_tracer(void * object, const std::type_info * tinfo)
     // We don't want these exceptions to be printed out.
     if (dynamic_cast<const ML::SilentException *>(exc)) return;
 
+    std::unique_lock<std::mutex> guard(bufferLock);
     /* avoid allocations when std::bad_alloc is thrown */
     bool noAlloc = dynamic_cast<const std::bad_alloc *>(exc);
 
-    size_t bufferSize(1024*1024);
-    char buffer[bufferSize];
     char datetime[128];
     size_t totalWritten(0), written, remaining(bufferSize);
 
