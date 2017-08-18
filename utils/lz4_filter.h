@@ -168,13 +168,24 @@ static_assert(sizeof(Header) == 7, "sizeof(lz4::Header) == 7");
 struct lz4_compressor : public boost::iostreams::multichar_output_filter
 {
     lz4_compressor(int level = 0, uint8_t blockSizeId = 7) :
-        head(blockSizeId, true, true, false), writeHeader(true), pos(0)
+        head(blockSizeId, true, true, false), writeHeader(true), pos(0),
+        streamChecksumState(0)
     {
         buffer.resize(head.blockSize());
         compressFn = level < 3 ? LZ4_compress : LZ4_compressHC;
 
-        if (head.streamChecksum())
-            streamChecksumState = XXH32_init(lz4::ChecksumSeed);
+        if (head.streamChecksum()) {
+            streamChecksumState = XXH32_createState();
+            XXH32_reset(streamChecksumState, lz4::ChecksumSeed);
+        }
+    }
+
+    ~lz4_compressor()
+    {
+        if (streamChecksumState) {
+            XXH32_freeState(streamChecksumState);
+            streamChecksumState = 0;
+        }
     }
 
     template<typename Sink>
@@ -258,7 +269,7 @@ private:
     bool writeHeader;
     std::vector<char> buffer;
     size_t pos;
-    void* streamChecksumState;
+    XXH32_state_t * streamChecksumState;
 };
 
 
@@ -268,7 +279,15 @@ private:
 
 struct lz4_decompressor : public boost::iostreams::multichar_input_filter
 {
-    lz4_decompressor() : done(false), toRead(0), pos(0) {}
+    lz4_decompressor() : done(false), toRead(0), pos(0), streamChecksumState(0) {}
+
+    ~lz4_decompressor()
+    {
+        if (streamChecksumState) {
+            XXH32_freeState(streamChecksumState);
+            streamChecksumState = 0;
+        }
+    }
 
     template<typename Source>
     std::streamsize read(Source& src, char* s, std::streamsize n)
@@ -276,8 +295,10 @@ struct lz4_decompressor : public boost::iostreams::multichar_input_filter
         if (done) return -1;
         if (!head) {
             head = lz4::Header::read(src);
-            if (head.streamChecksum())
-                streamChecksumState = XXH32_init(lz4::ChecksumSeed);
+            if (head.streamChecksum()) {
+                streamChecksumState = XXH32_createState();
+                XXH32_reset(streamChecksumState, lz4::ChecksumSeed);
+            }
         }
 
         size_t written = 0;
@@ -364,7 +385,7 @@ private:
     size_t toRead;
     size_t pos;
 
-    void* streamChecksumState;
+    XXH32_state_t * streamChecksumState;
 };
 
 } // namespace ML
